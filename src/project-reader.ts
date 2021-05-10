@@ -18,7 +18,7 @@ import { DeployStructure, PackageSpec, ActionSpec, WebResource, Includer, Projec
 import { emptyStructure, actionFileToParts, filterFiles, convertToResources, promiseFilesAndFilterFiles, loadProjectConfig, errorStructure, getDeployerAnnotation, getBestProjectName } from './util'
 import { getBuildForAction, getBuildForWeb } from './finder-builder'
 import { isGithubRef, parseGithubRef, fetchProject } from './github'
-import makeDebug from 'debug'
+import * as makeDebug from 'debug'
 import { makeFileReader } from './file-reader'
 import { makeGithubReader } from './github-reader'
 import { fetchSlice } from './slice-reader'
@@ -41,7 +41,7 @@ interface TopLevel {
     reader: ProjectReader
     feedback: Feedback
 }
-export async function readTopLevel(filePath: string, env: string | undefined, includer: Includer, mustBeLocal: boolean, feedback: Feedback): Promise<TopLevel> {
+export async function readTopLevel(filePath: string, env: string, includer: Includer, mustBeLocal: boolean, feedback: Feedback): Promise<TopLevel> {
   // The mustBeLocal arg is only important if the filePath denotes a github location.  In that case, a true value for
   // mustBeLocal causes the github contents to be fetched to a local cache and a FileReader is used.  A false value
   // causes a GithubReader to be used.

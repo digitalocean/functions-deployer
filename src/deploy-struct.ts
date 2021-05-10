@@ -241,7 +241,7 @@ export interface VersionEntry {
 export interface DeployerAnnotation {
     repository?: string
     commit?: string
-    digest?: string
+    digest: string
     projectPath: string
     user: string
     zipped?: boolean

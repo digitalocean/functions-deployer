@@ -18,7 +18,7 @@ import * as path from 'path'
 import {
   CredentialStore, CredentialEntry, CredentialHostMap, Credentials, CredentialRow, Feedback
 } from './deploy-struct'
-import createDebug from 'debug'
+import * as createDebug from 'debug'
 import { wskRequest, inBrowser } from './util'
 import { getStorageProvider, StorageKey } from '@nimbella/storage'
 const debug = createDebug('nimbella.cli')
@@ -200,7 +200,7 @@ export async function addCredentialAndSave(apihost: string, auth: string, storag
 }
 
 // Record namespace ownership in the credential store
-export async function recordNamespaceOwnership(project: string | undefined, namespace: string, apihost: string, production: boolean,
+export async function recordNamespaceOwnership(project: string, namespace: string, apihost: string, production: boolean,
   persister: Persister): Promise<boolean> {
   const store = await persister.loadCredentialStore()
   if (!apihost) {

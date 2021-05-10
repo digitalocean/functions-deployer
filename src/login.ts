@@ -15,9 +15,9 @@
 
 import { Credentials, FullCredentials } from './deploy-struct'
 import { Persister, fileSystemPersister, addCredentialAndSave, addCredential } from './credentials'
-import Debug from 'debug'
+import * as createDebug from 'debug'
 import { wskRequest } from './util'
-const debug = Debug('nimbella.cli')
+const debug = createDebug('nimbella.cli')
 
 // Local types
 

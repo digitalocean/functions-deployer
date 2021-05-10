@@ -16,10 +16,10 @@
 
 import * as Path from 'path'
 import * as fs from 'fs'
-import Octokit from '@octokit/rest'
-import rimrafOrig from 'rimraf'
+import * as Octokit from '@octokit/rest'
+import * as rimrafOrig from 'rimraf'
 import { promisify } from 'util'
-import makeDebug from 'debug'
+import * as makeDebug from 'debug'
 import { authPersister, getGithubAuth } from './credentials'
 
 const rimraf = promisify(rimrafOrig)

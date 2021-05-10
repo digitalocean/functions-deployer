@@ -23,9 +23,9 @@ import {
 import * as openwhisk from 'openwhisk'
 import { deployToBucket, cleanBucket } from './deploy-to-bucket'
 import { ensureWebLocal, deployToWebLocal } from './web-local'
-import rimrafOrig from 'rimraf'
+import * as rimrafOrig from 'rimraf'
 import { promisify } from 'util'
-import makeDebug from 'debug'
+import * as makeDebug from 'debug'
 
 const debug = makeDebug('nim:deployer:deploy')
 const seqDebug = makeDebug('nim:deployer:sequences')

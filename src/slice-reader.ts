@@ -13,9 +13,9 @@
 
 import * as path from 'path'
 import * as fs from 'fs'
-import makeDebug from 'debug'
-import Zip from 'adm-zip'
-import rimraf from 'rimraf'
+import * as makeDebug from 'debug'
+import * as Zip from 'adm-zip'
+import * as rimraf from 'rimraf'
 import { Credentials, DeployStructure } from './deploy-struct'
 import { StorageClient } from '@nimbella/storage'
 import { getCredentials, authPersister } from './credentials'

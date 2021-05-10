@@ -15,7 +15,7 @@ import * as fs from 'fs'
 import * as Path from 'path'
 import { promisify } from 'util'
 import { ProjectReader, PathKind } from './deploy-struct'
-import makeDebug from 'debug'
+import * as makeDebug from 'debug'
 const debug = makeDebug('nim:deployer:file-reader')
 
 // Don't run promisify at module scope: will fail in browser.  This module will never actually be used in a browser.

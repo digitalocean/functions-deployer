@@ -23,17 +23,17 @@ import * as fs from 'fs'
 import * as yaml from 'js-yaml'
 import ignore from 'ignore'
 import axios from 'axios'
-import archiver from 'archiver'
-import touch from 'touch'
-import Debug from 'debug'
+import * as archiver from 'archiver'
+import * as touch from 'touch'
+import * as makeDebug from 'debug'
 import { isGithubRef } from './github'
 import { Writable } from 'stream'
 import * as memoryStreams from 'memory-streams'
 import { getRemoteBuildName } from './slice-reader'
 import openwhisk = require('openwhisk')
 
-const debug = Debug('nim:deployer:finder-builder')
-const zipDebug = Debug('nim:deployer:zip')
+const debug = makeDebug('nim:deployer:finder-builder')
+const zipDebug = makeDebug('nim:deployer:zip')
 
 // Type to use with the ignore package.
 interface Ignore {

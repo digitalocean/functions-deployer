@@ -21,13 +21,13 @@ import { Client, Dict, Activation } from 'openwhisk'
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
-import simplegit from 'simple-git/promise'
+import * as simplegit from 'simple-git/promise'
 import * as mime from 'mime-types'
 import * as mimedb from 'mime-db'
 import * as randomstring from 'randomstring'
 import * as crypto from 'crypto'
 import * as yaml from 'js-yaml'
-import makeDebug from 'debug'
+import * as makeDebug from 'debug'
 import anymatch from 'anymatch'
 import { parseGithubRef } from './github'
 import { nimbellaDir } from './credentials'
@@ -104,7 +104,7 @@ function locateBuild(buildField: string, remoteRequested: boolean, remoteRequire
 
 // Set up the build fields for a project and detect conflicts.  Determine if local building is required.
 export async function checkBuildingRequirements(todeploy: DeployStructure, requestRemote: boolean): Promise<boolean> {
-  const checkConflicts = (buildField: string | undefined, remote: boolean | undefined, local: boolean | undefined, tag: string) => {
+  const checkConflicts = (buildField: string, remote: boolean, local: boolean, tag: string) => {
     if (remote && local) {
       throw new Error(`Local and remote building cannot both be required (${tag})`)
     }
@@ -155,7 +155,6 @@ export async function checkBuildingRequirements(todeploy: DeployStructure, reque
 async function hasDefaultRemote(action: ActionSpec, reader: ProjectReader): Promise<boolean> {
   let runtime = action.runtime
   if (!runtime) {
-    if (!action.file) return false
     const pathKind = await reader.getPathKind(action.file)
     if (pathKind.isFile) {
       ({ runtime } = actionFileToParts(pathKind.name))
@@ -180,7 +179,7 @@ async function hasDefaultRemote(action: ActionSpec, reader: ProjectReader): Prom
 // Check whether a list of names that are candidates for zipping can agree on a runtime.  This is called only when the
 // config doesn't already provide a runtime or on the raw material in the case of remote builds.
 export function agreeOnRuntime(items: string[]): string {
-  let agreedRuntime: string = ''
+  let agreedRuntime: string
   items.forEach(item => {
     const { runtime } = actionFileToParts(item)
     if (runtime) {
@@ -202,8 +201,8 @@ function removeEmptyStringMembers(config: DeployStructure) {
   if (config.actionWrapPackage && config.actionWrapPackage === '') {
     delete config.targetNamespace
   }
-  if (config.bucket) removeEmptyStringMembersFromBucket(config.bucket)
-  if (config.packages) removeEmptyStringMembersFromPackages(config.packages)
+  removeEmptyStringMembersFromBucket(config.bucket)
+  removeEmptyStringMembersFromPackages(config.packages)
 }
 
 // Remove empty optional string-valued members from a bucket spec
@@ -239,7 +238,7 @@ function removeEmptyStringMembersFromPackages(packages: PackageSpec[]) {
 
 // Validation for DeployStructure read from disk.  Note: this may be any valid DeployStructure except that the strays member
 // is not expected in this context.  TODO return a list of errors not just the first error.
-export function validateDeployConfig(arg: any): string | undefined {
+export function validateDeployConfig(arg: any): string {
   let haveActionWrap = false; let haveBucket = false
   const slice = !!arg.slice
   for (const item in arg) {
@@ -331,7 +330,7 @@ function isValidOwnership(item: any): boolean {
 }
 
 // Validator for BucketSpec
-function validateBucketSpec(arg: Record<string, any>): string | undefined {
+function validateBucketSpec(arg: Record<string, any>): string {
   for (const item in arg) {
     switch (item) {
     case 'prefixPath':
@@ -362,7 +361,7 @@ function validateBucketSpec(arg: Record<string, any>): string | undefined {
 }
 
 // Validator for a WebResource
-function validateWebResource(arg: Record<string, any>): string | undefined {
+function validateWebResource(arg: Record<string, any>): string {
   for (const item in arg) {
     switch (item) {
     case 'simpleName':
@@ -379,7 +378,7 @@ function validateWebResource(arg: Record<string, any>): string | undefined {
 }
 
 // Validator for a PackageSpec
-function validatePackageSpec(arg: Record<string, any>): string | undefined {
+function validatePackageSpec(arg: Record<string, any>): string {
   const isDefault = arg.name === 'default'
   for (const item in arg) {
     if (!arg[item]) continue
@@ -427,7 +426,7 @@ function validatePackageSpec(arg: Record<string, any>): string | undefined {
 }
 
 // Validator for ActionSpec
-function validateActionSpec(arg: Record<string, any>): string | undefined {
+function validateActionSpec(arg: Record<string, any>): string {
   for (const item in arg) {
     if (!arg[item]) continue
     switch (item) {
@@ -493,7 +492,7 @@ function validateActionSpec(arg: Record<string, any>): string | undefined {
 }
 
 // Validator for the 'environment' clause of package or action.  Checks that all values are strings
-function validateEnvironment(item: any): string | undefined {
+function validateEnvironment(item: any): string {
   if (!isDictionary(item)) {
     return 'the environment clause must be a dictionary'
   }
@@ -507,7 +506,7 @@ function validateEnvironment(item: any): string | undefined {
 }
 
 // Validator for the limits clause
-function validateLimits(arg: any): string | undefined {
+function validateLimits(arg: any): string {
   for (const item in arg) {
     const value = arg[item]
     switch (item) {
@@ -526,7 +525,7 @@ function validateLimits(arg: any): string | undefined {
 }
 
 // Convert convenient "Dict" to the less convenient "KeyVal[]" required in an action object
-export function keyVal(from: Dict): KeyVal[] | undefined {
+export function keyVal(from: Dict): KeyVal[] {
   if (!from) {
     return undefined
   }
@@ -556,7 +555,7 @@ export function errorStructure(err: Error): DeployStructure {
 
 // Provide an empty DeployResponse with all required members defined but empty
 export function emptyResponse(): DeployResponse {
-  return { successes: [], failures: [], ignored: [], namespace: '', packageVersions: {}, actionVersions: {} }
+  return { successes: [], failures: [], ignored: [], namespace: undefined, packageVersions: {}, actionVersions: {} }
 }
 
 // Combine multiple DeployResponses into a single DeployResponse
@@ -585,7 +584,7 @@ export function straysToResponse(strays: string[]): DeployResponse {
     failures: [],
     packageVersions: {},
     actionVersions: {},
-    namespace: ''
+    namespace: undefined
   }
 }
 
@@ -597,12 +596,12 @@ export function wrapSuccess(name: string, kind: DeployKind, skipped: boolean, wr
 }
 
 // Wrap a single error as a DeployResponse
-export function wrapError(err: any, context?: string): DeployResponse {
+export function wrapError(err: any, context: string): DeployResponse {
   debug('wrapping an error: %O', err)
   if (typeof err === 'object') {
     err.context = context
   }
-  const result = { successes: [], failures: [err], ignored: [], packageVersions: {}, actionVersions: {}, namespace: ''}
+  const result = { successes: [], failures: [err], ignored: [], packageVersions: {}, actionVersions: {}, namespace: undefined }
   debug('wrapped error: %O', result)
   return result
 }
@@ -624,8 +623,8 @@ export function getTargetNamespace(client: Client): Promise<string> {
 }
 
 // Process an action file name, producing 'name', 'binary', 'zipped' and 'runtime' parts
-export function actionFileToParts(fileName: string): { name: string, binary: boolean, zipped: boolean, runtime: string | undefined } {
-  let runtime: string | undefined
+export function actionFileToParts(fileName: string): { name: string, binary: boolean, zipped: boolean, runtime: string } {
+  let runtime: string
   let binary: boolean
   let zipped: boolean
   let name = path.basename(fileName)
@@ -633,7 +632,7 @@ export function actionFileToParts(fileName: string): { name: string, binary: boo
   if (split > 0) {
     const parts = name.split('.')
     const ext = parts[parts.length - 1]
-    let mid: string | undefined
+    let mid: string
     if (parts.length === 2) {
       name = parts[0]
     } else if (ext === 'zip') {
@@ -725,7 +724,7 @@ function initRuntimes() {
 }
 
 // Compute the runtime from the file extension.
-function runtimeFromExt(ext: string): string | undefined {
+function runtimeFromExt(ext: string): string {
   initRuntimes()
   if (extTable[ext]) {
     return extTable[ext] + ':default'
@@ -734,7 +733,7 @@ function runtimeFromExt(ext: string): string | undefined {
 }
 
 // Compute a runtime kind from the 'mid string' of a file name of the form name.runtime.zip
-function runtimeFromZipMid(mid: string): string | undefined {
+function runtimeFromZipMid(mid: string): string {
   if (mid.includes('-')) {
     return validateRuntime(mid.replace('-', ':'))
   } else {
@@ -745,7 +744,7 @@ function runtimeFromZipMid(mid: string): string | undefined {
 // Compute the file extension from a runtime name.  It is a non-fatal exception for the caller to request a binary extension for
 // a runtime that has only non-binary ones (or vice versa).  However, the runtime name should not depend on user-provided
 // data and should always be valid.
-export function extFromRuntime(runtime: string, binary: boolean): string | undefined {
+export function extFromRuntime(runtime: string, binary: boolean): string {
   initRuntimes()
   if (validRuntimes[runtime]) {
     const extArray = validRuntimes[runtime]
@@ -761,7 +760,7 @@ export function extFromRuntime(runtime: string, binary: boolean): string | undef
 }
 
 // Validate that a colon separated string actually IS a valid runtime.  Returns the string if so and undefined if not.
-function validateRuntime(kind: string): string | undefined {
+function validateRuntime(kind: string): string {
   initRuntimes()
   if (kind in validRuntimes) {
     return kind
@@ -814,7 +813,7 @@ async function promiseFiles(dir: string, reader: ProjectReader): Promise<string[
     const next = subdirs.pop()
     debug("promiseFiles recursing on subdirectory '%s', with '%d' files accumulated and '%d' subdirectories still pending",
       next, files.length, subdirs.length)
-    if (next) subdirs = await promiseFilesRound(next, files, subdirs, reader)
+    subdirs = await promiseFilesRound(next, files, subdirs, reader)
   }
   debug('promiseFiles returning with %d files', files.length)
   return files
@@ -931,7 +930,7 @@ function getDictionarySubstitution(tokens: string, props: Record<string, unknown
 // Get a substitution JSON string from a file.  The file is read and, if it is valid JSON, it is simply used as is.
 // Otherwise, it is reparsed as a properties file and the result is converted to JSON.  If the file is neither a valid JSON
 // file nor a valid properties file, that is an error.
-function getSubstituteFromFile(path: string): string | undefined {
+function getSubstituteFromFile(path: string): string {
   if (!fs.existsSync(path)) {
     return undefined
   }
@@ -1032,7 +1031,7 @@ export function mapActions(actions: ActionSpec[]): ActionMap {
 export function getBestProjectName(project: DeployStructure): string {
   const annot = project.deployerAnnotation
   if (!annot) {
-    return project.githubPath || project.filePath || 'unknown-project-name'
+    return project.githubPath || project.filePath
   }
   if (annot.repository) {
     let repo = annot.repository
@@ -1162,11 +1161,11 @@ export function digestPackage(pkg: PackageSpec): string {
   return String(hash.digest('hex'))
 }
 
-function digestBoolean(hash: crypto.Hash, toDigest?: boolean) {
+function digestBoolean(hash: crypto.Hash, toDigest: boolean) {
   hash.update(String(!!toDigest))
 }
 
-function digestDictionary(hash: crypto.Hash, toDigest?: Record<string, any>) {
+function digestDictionary(hash: crypto.Hash, toDigest: Record<string, any>) {
   if (toDigest) {
     const keys = Object.keys(toDigest).sort()
     for (const key of keys) {
@@ -1205,7 +1204,7 @@ export function digestAction(action: ActionSpec, code: string): string {
   if (action.main) {
     hash.update(action.main)
   }
-  if (action.runtime) hash.update(action.runtime)
+  hash.update(action.runtime)
   return String(hash.digest('hex'))
 }
 
@@ -1239,7 +1238,7 @@ export function writeSliceResult(project: string, result: string): void {
 export function writeProjectStatus(project: string, results: DeployResponse, replace: boolean): string {
   debug('writing project status with %O', results)
   const { apihost, namespace, packageVersions, actionVersions, webHashes } = results
-  if (Object.keys(actionVersions).length === 0 && Object.keys(packageVersions).length === 0 && Object.keys(webHashes || {}).length === 0) {
+  if (Object.keys(actionVersions).length === 0 && Object.keys(packageVersions).length === 0 && Object.keys(webHashes).length === 0) {
     debug('there is no meaningful project status to write')
     return ''
   }
@@ -1254,14 +1253,8 @@ export function writeProjectStatus(project: string, results: DeployResponse, rep
       debug('version list using legacy format, not preserved')
     } // Otherwise (not array) it is the legacy format and cannot be added to so we just overwrite
   }
-
-  if (!apihost) {
-    debug('missing apihost mandatory parameter')
-    return ''
-  }
-
-  const versionInfo: VersionEntry = { apihost, namespace, packageVersions, actionVersions, webHashes: webHashes || {} }
-  const oldEntry: VersionEntry | undefined = versionList.find(entry => entry.apihost === apihost && entry.namespace === namespace)
+  const versionInfo: VersionEntry = { apihost, namespace, packageVersions, actionVersions, webHashes }
+  const oldEntry: VersionEntry = versionList.find(entry => entry.apihost === apihost && entry.namespace === namespace)
   if (!oldEntry) {
     debug('new entry pushed to version list')
     versionList.push(versionInfo)
@@ -1314,7 +1307,7 @@ export async function waitForActivation(id: string, wsk: Client, waiting: ()=>vo
   for (let i = 1; i < 151; i++) {
     try {
       const activation = await wsk.activations.get(id)
-      if (activation.end || activation.response?.status) {
+      if (activation.end || activation.response.status) {
         debug('activation %s found after %d iterations', id, i)
         return activation
       }
@@ -1333,7 +1326,7 @@ export async function waitForActivation(id: string, wsk: Client, waiting: ()=>vo
 
 // Subroutine to invoke OW with a GET and return the response.  Bypasses the OW client.  Used
 // to invoke web actions, with or without auth needed.
-export function wskRequest(url: string, auth?: string | undefined): Promise<any> {
+export function wskRequest(url: string, auth: string = undefined): Promise<any> {
   debug('Request to: %s', url)
   return new Promise(function(resolve, reject) {
     const xhr = new XMLHttpRequest()
@@ -1382,11 +1375,9 @@ export function isExcluded(match: string): boolean {
   return anymatch(getExclusionList(), match)
 }
 
-type matcherFn = (s: string) => boolean;
-
 // Returns full list of exclusion patterns, predefined or listed in the global .exclude file.
-export function getExclusionList(): (string | matcherFn)[] {
-  let userDefinedPatterns: (string | matcherFn)[] = []
+export function getExclusionList(): string[] {
+  let userDefinedPatterns = []
   try {
     const globalExcludeFile = path.join(nimbellaDir(), '.exclude')
     userDefinedPatterns = fs.readFileSync(globalExcludeFile).toString().split('\n').filter(e => e.toString().trim() !== '')

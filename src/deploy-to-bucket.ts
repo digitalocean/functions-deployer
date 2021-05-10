@@ -17,12 +17,12 @@ import {
 import { getStorageProvider, StorageClient, StorageKey } from '@nimbella/storage'
 import { wrapSuccess, wrapError, inBrowser } from './util'
 import axios from 'axios'
-import openwhisk from 'openwhisk'
+import * as openwhisk from 'openwhisk'
 import * as path from 'path'
 import * as fs from 'fs'
 import * as crypto from 'crypto'
-import Debug from 'debug'
-const debug = Debug('nim:deployer:deploy-to-bucket')
+import * as makeDebug from 'debug'
+const debug = makeDebug('nim:deployer:deploy-to-bucket')
 
 // Open a "bucket client" (object of type Bucket) to use in deploying web resources or object resources
 // to the bucket associated with the credentials.  Assumes credentials have sufficient information.

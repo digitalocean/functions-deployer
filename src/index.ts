@@ -21,7 +21,6 @@ export {
   DeployStructure, DeployResponse, DeploySuccess, OWOptions, Credentials, CredentialRow, Flags, PackageSpec, ActionSpec,
   CredentialHostMap, CredentialNSMap, DeployerAnnotation, VersionMap, Feedback, DefaultFeedback, FullCredentials, IdProvider
 } from './deploy-struct'
-// TODO: DO we need this now?
 export {
   StorageProvider, StorageClient, RemoteFile
 } from '@nimbella/storage'

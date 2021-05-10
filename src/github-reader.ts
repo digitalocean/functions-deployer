@@ -15,7 +15,7 @@ import { ProjectReader, PathKind } from './deploy-struct'
 import { GithubDef, makeClient, readContents, seemsToBeProject, OctokitNonArrayResponse } from './github'
 import * as Octokit from '@octokit/rest'
 import * as PathPkg from 'path'
-import makeDebug from 'debug'
+import * as makeDebug from 'debug'
 const debug = makeDebug('nim:deployer:github-reader')
 
 // Defines the github version of the ProjectReader

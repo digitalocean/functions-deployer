@@ -12,11 +12,11 @@
  */
 
 import { Includer } from './deploy-struct'
-import makeDebug from 'debug'
+import * as makeDebug from 'debug'
 const debug = makeDebug('nim:deployer:includer')
 
 // Make an includer
-export function makeIncluder(include: string | undefined, exclude: string | undefined): Includer {
+export function makeIncluder(include: string, exclude: string): Includer {
   const includes = include ? include.split(',') : undefined
   const excludes = exclude ? exclude.split(',') : undefined
   const ans = new IncluderImpl(includes, excludes)
@@ -34,7 +34,7 @@ class IncluderImpl implements Includer {
     excludedActions: Map<string, Set<string>> = new Map()
 
     // Construct
-    constructor(includes: string[] | undefined, excludes: string[] | undefined) {
+    constructor(includes: string[], excludes: string[]) {
       if (!includes) {
         this.isWebIncluded = true
         this.isExcludingOnly = true

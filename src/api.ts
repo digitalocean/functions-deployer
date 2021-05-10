@@ -22,10 +22,10 @@ import {
 } from './util'
 import { openBucketClient } from './deploy-to-bucket'
 import { buildAllActions, buildWeb } from './finder-builder'
-import openwhisk from 'openwhisk'
+import * as openwhisk from 'openwhisk'
 import { getCredentialsForNamespace, getCredentials, Persister, recordNamespaceOwnership } from './credentials'
 import { makeIncluder } from './includer'
-import makeDebug from 'debug'
+import * as makeDebug from 'debug'
 const debug = makeDebug('nim:deployer:api')
 
 // Initialize the API by 1. purging existing __OW_ entries from the environment, 2.  setting __OW_USER_AGENT, 3. returning a map of
@@ -35,7 +35,7 @@ export function initializeAPI(userAgent: string): {[key: string]: string} {
   const result: Record<string, string> = {}
   for (const item in process.env) {
     if (item.startsWith('__OW_')) {
-      result[item] = process.env[item] || ''
+      result[item] = process.env[item]
       delete process.env[item]
     }
   }
@@ -72,14 +72,14 @@ export function deployProject(path: string, owOptions: OWOptions, credentials: C
 }
 
 // Combines the read, prepare, and build phases but does not deploy
-export function readPrepareAndBuild(path: string, owOptions: OWOptions, credentials: Credentials|undefined, persister: Persister,
+export function readPrepareAndBuild(path: string, owOptions: OWOptions, credentials: Credentials, persister: Persister,
   flags: Flags, userAgent?: string, feedback?: Feedback): Promise<DeployStructure> {
   return readAndPrepare(path, owOptions, credentials, persister, flags, undefined, feedback).then(spec => spec.error ? spec
     : buildProject(spec))
 }
 
 // Combines the read and prepare phases but does not build or deploy
-export function readAndPrepare(path: string, owOptions: OWOptions, credentials: Credentials|undefined, persister: Persister,
+export function readAndPrepare(path: string, owOptions: OWOptions, credentials: Credentials, persister: Persister,
   flags: Flags, userAgent?: string, feedback?: Feedback): Promise<DeployStructure> {
   const includer = makeIncluder(flags.include, flags.exclude)
   return readProject(path, flags.env, includer, flags.remoteBuild, feedback).then(spec => spec.error ? spec
@@ -90,13 +90,13 @@ export function readAndPrepare(path: string, owOptions: OWOptions, credentials: 
 export function deploy(todeploy: DeployStructure): Promise<DeployResponse> {
   debug('Starting deploy')
   return cleanOrLoadVersions(todeploy).then(doDeploy).then(results => {
-    if (!todeploy.githubPath && todeploy.filePath) {
-      const statusDir = writeProjectStatus(todeploy.filePath as string, results, todeploy?.includer?.isIncludingEverything() || false)
+    if (!todeploy.githubPath) {
+      const statusDir = writeProjectStatus(todeploy.filePath, results, todeploy.includer.isIncludingEverything())
       if (statusDir && !todeploy.slice) {
-        todeploy?.feedback?.progress(`Deployment status recorded in '${statusDir}'`)
+        todeploy.feedback.progress(`Deployment status recorded in '${statusDir}'`)
       }
     }
-    if (!results.namespace && todeploy?.credentials?.namespace) {
+    if (!results.namespace && todeploy.credentials) {
       results.namespace = todeploy.credentials.namespace
     }
     return results
@@ -104,7 +104,7 @@ export function deploy(todeploy: DeployStructure): Promise<DeployResponse> {
 }
 
 // Read the information contained in the project, initializing the DeployStructure
-export async function readProject(projectPath: string, envPath: string | undefined, includer: Includer, requestRemote: boolean,
+export async function readProject(projectPath: string, envPath: string, includer: Includer, requestRemote: boolean,
   feedback: Feedback = new DefaultFeedback()): Promise<DeployStructure> {
   debug('Starting readProject, projectPath=%s, envPath=%s', projectPath, envPath)
   let ans: DeployStructure
@@ -123,7 +123,7 @@ export async function readProject(projectPath: string, envPath: string | undefin
   } catch (err) {
     return errorStructure(err)
   }
-  if (needsLocalBuilds && ans?.reader?.getFSLocation() === null) {
+  if (needsLocalBuilds && ans.reader.getFSLocation() === null) {
     debug("project '%s' will be re-read and cached because it's a github project that needs local building", projectPath)
     if (inBrowser) {
       return errorStructure(new Error(`Project '${projectPath}' cannot be deployed from the cloud because it requires building`))
@@ -142,7 +142,7 @@ export async function readProject(projectPath: string, envPath: string | undefin
 // 'Build' the project by running the "finder builder" steps in each action-as-directory and in the web directory
 export function buildProject(project: DeployStructure): Promise<DeployStructure> {
   debug('Starting buildProject with spec %O', project)
-  let webPromise: Promise<WebResource[]|Error> | undefined
+  let webPromise: Promise<WebResource[]|Error>
   project.sharedBuilds = { }
   if (project.webBuild) {
     webPromise = buildWeb(project).catch(err => Promise.resolve(err))
@@ -187,8 +187,8 @@ export function buildProject(project: DeployStructure): Promise<DeployStructure>
 //    Validation includes the optional check on the target namespace; even if it came from the credentials it might no longer be valid.
 // 4.  Do action wrapping of web resources.  This creates additional actions in the final deployment.  The original web resources
 //    are not deleted but are not deployed as such.
-export async function prepareToDeploy(inputSpec: DeployStructure, owOptions: OWOptions, credentials: Credentials | undefined, persister: Persister,
-  flags: Flags | undefined): Promise<DeployStructure> {
+export async function prepareToDeploy(inputSpec: DeployStructure, owOptions: OWOptions, credentials: Credentials, persister: Persister,
+  flags: Flags): Promise<DeployStructure> {
   debug('Starting prepare with spec: %O', inputSpec)
   // 0. Handle slice.  In that case, credentials and flags come from the DeployStructure
   if (inputSpec.slice) {
@@ -201,12 +201,12 @@ export async function prepareToDeploy(inputSpec: DeployStructure, owOptions: OWO
   let isProduction = false
   if (!credentials) {
     debug('Finding credentials locally')
-    let namespace: string | undefined
+    let namespace: string
     if (typeof inputSpec.targetNamespace === 'string') {
       namespace = inputSpec.targetNamespace
     } else if (inputSpec.targetNamespace) {
       const { test, production } = inputSpec.targetNamespace // previously validated
-      if (flags?.production) {
+      if (flags.production) {
         if (production) {
           namespace = production
           isProduction = true
@@ -228,7 +228,7 @@ export async function prepareToDeploy(inputSpec: DeployStructure, owOptions: OWO
       credentials = await getCredentialsForNamespace(namespace, owOptions.apihost, persister)
     } else {
       // There is no target namespace so get credentials for the current one
-      let badCredentials: Error | undefined
+      let badCredentials: Error
       debug('Attempting to get credentials for current namespace')
       credentials = await getCredentials(persister).catch(err => {
         badCredentials = err
@@ -241,9 +241,9 @@ export async function prepareToDeploy(inputSpec: DeployStructure, owOptions: OWO
     }
   }
   debug('owOptions: %O', owOptions)
-  debug('credentials.ow: %O', credentials?.ow)
+  debug('credentials.ow: %O', credentials.ow)
   // We have valid credentials but now we must check that we are allowed to deploy to the namespace according to the ownership rules.
-  if (credentials?.project) {
+  if (credentials.project) {
     const apparentProject = getBestProjectName(inputSpec)
     if (credentials.project !== apparentProject) {
       return errorStructure(new Error(`Deployment to namespace '${credentials.namespace}' must be from project '${credentials.project}'`))
@@ -259,10 +259,10 @@ export async function prepareToDeploy(inputSpec: DeployStructure, owOptions: OWO
   }
   // Record ownership if it is declared.  At this point we know it is legal and non-conflicting.
   if (isTest || isProduction) {
-    recordNamespaceOwnership(getBestProjectName(inputSpec), credentials?.namespace, credentials?.ow.apihost, isProduction, persister)
+    recordNamespaceOwnership(getBestProjectName(inputSpec), credentials.namespace, credentials.ow.apihost, isProduction, persister)
   }
   // Merge and save credentials information
-  const wskoptions = Object.assign({}, credentials?.ow, owOptions || {})
+  const wskoptions = Object.assign({}, credentials.ow, owOptions || {})
   debug('wskoptions" %O', wskoptions)
   inputSpec.credentials = credentials
   debug('prepareToDeploy merging flags: %O', flags)
