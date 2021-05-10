@@ -20,12 +20,12 @@ import {
   combineResponses, wrapError, wrapSuccess, keyVal, emptyResponse, isTextType,
   straysToResponse, wipe, makeDict, digestPackage, digestAction, loadVersions, waitForActivation
 } from './util'
-import * as openwhisk from 'openwhisk'
+import openwhisk from 'openwhisk'
 import { deployToBucket, cleanBucket } from './deploy-to-bucket'
 import { ensureWebLocal, deployToWebLocal } from './web-local'
-import * as rimrafOrig from 'rimraf'
+import rimrafOrig from 'rimraf'
 import { promisify } from 'util'
-import * as makeDebug from 'debug'
+import makeDebug from 'debug'
 
 const debug = makeDebug('nim:deployer:deploy')
 const seqDebug = makeDebug('nim:deployer:sequences')

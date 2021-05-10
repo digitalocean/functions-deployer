@@ -12,7 +12,7 @@
  */
 
 import { Includer } from './deploy-struct'
-import * as makeDebug from 'debug'
+import makeDebug from 'debug'
 const debug = makeDebug('nim:deployer:includer')
 
 // Make an includer

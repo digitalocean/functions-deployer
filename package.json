@@ -65,6 +65,7 @@
   "scripts": {
     "prepack": "npm run build",
     "test": "echo NO TESTS",
+    "smoke-test": "./tests/load-built-library.js",
     "build": "tsc && node esbuild.config.js"
   },
   "types": "lib/index.d.ts"

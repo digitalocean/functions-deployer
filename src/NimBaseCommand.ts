@@ -35,7 +35,7 @@ import { authPersister, getCredentialList } from './credentials'
 import { Feedback } from './deploy-struct'
 import { GaxiosError } from 'gaxios'
 
-import * as createDebug from 'debug'
+import createDebug from 'debug'
 const debug = createDebug('nim:base')
 const verboseError = createDebug('nim:error')
 

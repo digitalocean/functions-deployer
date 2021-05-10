@@ -18,7 +18,7 @@ import { DeployStructure, PackageSpec, ActionSpec, WebResource, Includer, Projec
 import { emptyStructure, actionFileToParts, filterFiles, convertToResources, promiseFilesAndFilterFiles, loadProjectConfig, errorStructure, getDeployerAnnotation, getBestProjectName } from './util'
 import { getBuildForAction, getBuildForWeb } from './finder-builder'
 import { isGithubRef, parseGithubRef, fetchProject } from './github'
-import * as makeDebug from 'debug'
+import makeDebug from 'debug'
 import { makeFileReader } from './file-reader'
 import { makeGithubReader } from './github-reader'
 import { fetchSlice } from './slice-reader'

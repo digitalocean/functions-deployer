@@ -13,8 +13,8 @@
 
 import * as path from 'path'
 import * as fs from 'fs'
-import * as makeDebug from 'debug'
-import * as Zip from 'adm-zip'
+import makeDebug from 'debug'
+import Zip from 'adm-zip'
 import * as rimraf from 'rimraf'
 import { Credentials, DeployStructure } from './deploy-struct'
 import { StorageClient } from '@nimbella/storage'

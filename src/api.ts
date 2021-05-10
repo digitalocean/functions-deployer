@@ -22,10 +22,10 @@ import {
 } from './util'
 import { openBucketClient } from './deploy-to-bucket'
 import { buildAllActions, buildWeb } from './finder-builder'
-import * as openwhisk from 'openwhisk'
+import openwhisk from 'openwhisk'
 import { getCredentialsForNamespace, getCredentials, Persister, recordNamespaceOwnership } from './credentials'
 import { makeIncluder } from './includer'
-import * as makeDebug from 'debug'
+import makeDebug from 'debug'
 const debug = makeDebug('nim:deployer:api')
 
 // Initialize the API by 1. purging existing __OW_ entries from the environment, 2.  setting __OW_USER_AGENT, 3. returning a map of

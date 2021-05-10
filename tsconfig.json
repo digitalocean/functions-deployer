@@ -4,7 +4,7 @@
     "declaration": true,
     "module": "commonjs",
     "target": "es2017",
-    "strict": true,
+    "strict": false,
     "outDir": "lib",
     "rootDir": "src",
     "sourceMap": true,

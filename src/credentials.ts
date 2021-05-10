@@ -18,7 +18,7 @@ import * as path from 'path'
 import {
   CredentialStore, CredentialEntry, CredentialHostMap, Credentials, CredentialRow, Feedback
 } from './deploy-struct'
-import * as createDebug from 'debug'
+import createDebug from 'debug'
 import { wskRequest, inBrowser } from './util'
 import { getStorageProvider, StorageKey } from '@nimbella/storage'
 const debug = createDebug('nimbella.cli')
