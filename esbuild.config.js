@@ -14,6 +14,6 @@ esbuild.build({
   platform: 'node',
   sourcemap: true,
   target: 'node14',
-  external: ['*.html'],
+  external: ['*.html', '*.json'],
   plugins: [nodeExternalsPlugin()]
 }).catch(() => process.exit(1))
