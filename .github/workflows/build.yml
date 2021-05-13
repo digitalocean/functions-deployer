@@ -17,7 +17,7 @@ jobs:
       with:
         node-version: ${{ matrix.node-version }}
     - name: Install dependencies
-      run: npm install
+      run: npm ci
     - name: Check build process
       run: npm pack
     - name: Smoke test built library
