@@ -5,7 +5,9 @@
         "kind": "rust:1.34",
         "default": true,
         "image": {
-          "name": "actionloop-rust-v1.34"
+          "prefix": "DOCKER_IMAGE_PREFIX",
+          "name": "actionloop-rust-v1.34",
+          "tag": "DOCKER_IMG_TAG"
         },
         "deprecated": false,
         "attached": {
@@ -24,7 +26,9 @@
         "kind": "nodejs:10",
         "default": true,
         "image": {
-          "name": "action-nodejs-v10"
+          "prefix": "DOCKER_IMAGE_PREFIX",
+          "name": "action-nodejs-v10",
+          "tag": "DOCKER_IMG_TAG"
         },
         "stemCells": [
           {
@@ -47,7 +51,9 @@
         "kind": "nodejs-lambda:10",
         "default": false,
         "image": {
-          "name": "action-nodejs-v10-lambda"
+          "prefix": "DOCKER_IMAGE_PREFIX",
+          "name": "action-nodejs-v10-lambda",
+          "tag": "DOCKER_IMG_TAG"
         },
         "deprecated": false,
         "attached": {
@@ -61,23 +67,12 @@
         }
       },
       {
-        "kind": "nodejs:8",
-        "default": false,
-        "image": {
-          "name": "action-nodejs-v8"
-        },
-        "deprecated": false,
-        "extensions": {
-          "js": {
-            "binary": false
-          }
-        }
-      },
-      {
         "kind": "tessjs:10",
         "default": false,
         "image": {
-          "name": "action-tessjs-v10"
+          "prefix": "DOCKER_IMAGE_PREFIX",
+          "name": "action-tessjs-v10",
+          "tag": "DOCKER_IMG_TAG"
         },
         "stemCells": [
           {
@@ -100,7 +95,9 @@
         "kind": "cloudjs:10",
         "default": false,
         "image": {
-          "name": "action-cloudjs-v10"
+          "prefix": "DOCKER_IMAGE_PREFIX",
+          "name": "action-cloudjs-v10",
+          "tag": "DOCKER_IMG_TAG"
         },
         "deprecated": false,
         "attached": {
@@ -114,11 +111,34 @@
         }
       }
     ],
+    "deno": [
+      {
+        "kind": "deno:1.3.0",
+        "default": true,
+        "image": {
+          "prefix": "DOCKER_IMAGE_PREFIX",
+          "name": "actionloop-deno-v1.3.0",
+          "tag": "DOCKER_IMG_TAG"
+        },
+        "deprecated": false,
+        "attached": {
+          "attachmentName": "codefile",
+          "attachmentType": "text/plain"
+        },
+        "extensions": {
+          "ts": {
+            "binary": false
+          }
+        }
+      }
+    ],
     "python": [
       {
         "kind": "python:2",
         "image": {
-          "name": "actionloop-python-v2.7"
+          "prefix": "DOCKER_IMAGE_PREFIX",
+          "name": "actionloop-python-v2.7",
+          "tag": "DOCKER_IMG_TAG"
         },
         "deprecated": false,
         "extensions": {
@@ -131,7 +151,9 @@
         "kind": "python:3",
         "default": true,
         "image": {
-          "name": "actionloop-python-v3.7"
+          "prefix": "DOCKER_IMAGE_PREFIX",
+          "name": "actionloop-python-v3.7",
+          "tag": "DOCKER_IMG_TAG"
         },
         "deprecated": false,
         "attached": {
@@ -148,7 +170,9 @@
         "kind": "python:3ai",
         "default": false,
         "image": {
-          "name": "actionloop-python-v3.7ai"
+          "prefix": "DOCKER_IMAGE_PREFIX",
+          "name": "actionloop-python-v3.7ai",
+          "tag": "DOCKER_IMG_TAG"
         },
         "deprecated": false,
         "attached": {
@@ -166,9 +190,15 @@
       {
         "kind": "typescript:3.7",
         "image": {
-          "name": "action-typescript-v3.7"
+          "prefix": "DOCKER_IMAGE_PREFIX",
+          "name": "action-typescript-v3.7",
+          "tag": "DOCKER_IMG_TAG"
         },
         "deprecated": false,
+        "attached": {
+          "attachmentName": "codefile",
+          "attachmentType": "text/plain"
+        },
         "default": true,
         "extensions": {
           "ts": {
@@ -182,7 +212,9 @@
         "kind": "java:8",
         "default": true,
         "image": {
-          "name": "actionloop-java-v8"
+          "prefix": "DOCKER_IMAGE_PREFIX",
+          "name": "actionloop-java-v8",
+          "tag": "DOCKER_IMG_TAG"
         },
         "deprecated": false,
         "attached": {
@@ -202,9 +234,30 @@
     "go": [
       {
         "kind": "go:1.12",
+        "default": false,
+        "image": {
+          "prefix": "DOCKER_IMAGE_PREFIX",
+          "name": "actionloop-golang-v1.12",
+          "tag": "DOCKER_IMG_TAG"
+        },
+        "deprecated": false,
+        "attached": {
+          "attachmentName": "codefile",
+          "attachmentType": "text/plain"
+        },
+        "extensions": {
+          "go": {
+            "binary": false
+          }
+        }
+      },
+      {
+        "kind": "go:1.15",
         "default": true,
         "image": {
-          "name": "actionloop-golang-v1.12"
+          "prefix": "DOCKER_IMAGE_PREFIX",
+          "name": "actionloop-golang-v1.15",
+          "tag": "DOCKER_IMG_TAG"
         },
         "deprecated": false,
         "attached": {
@@ -223,7 +276,9 @@
         "kind": "swift:4",
         "default": true,
         "image": {
-          "name": "actionloop-swift-v4.2"
+          "prefix": "DOCKER_IMAGE_PREFIX",
+          "name": "actionloop-swift-v4.2",
+          "tag": "DOCKER_IMG_TAG"
         },
         "deprecated": false,
         "attached": {
@@ -240,9 +295,30 @@
     "php": [
       {
         "kind": "php:7.3",
+        "default": false,
+        "image": {
+          "prefix": "DOCKER_IMAGE_PREFIX",
+          "name": "actionloop-php-v7.3",
+          "tag": "DOCKER_IMG_TAG"
+        },
+        "deprecated": false,
+        "attached": {
+          "attachmentName": "codefile",
+          "attachmentType": "text/plain"
+        },
+        "extensions": {
+          "php": {
+            "binary": false
+          }
+        }
+      },
+      {
+        "kind": "php:8.0",
         "default": true,
         "image": {
-          "name": "actionloop-php-v7.3"
+          "prefix": "DOCKER_IMAGE_PREFIX",
+          "name": "actionloop-php-v8.0",
+          "tag": "DOCKER_IMG_TAG"
         },
         "deprecated": false,
         "attached": {
@@ -261,7 +337,9 @@
         "kind": "ruby:2.6",
         "default": true,
         "image": {
-          "name": "actionloop-ruby-v2.6"
+          "prefix": "DOCKER_IMAGE_PREFIX",
+          "name": "actionloop-ruby-v2.6",
+          "tag": "DOCKER_IMG_TAG"
         },
         "deprecated": false,
         "attached": {
@@ -278,7 +356,9 @@
         "kind": "ruby:2.5",
         "default": false,
         "image": {
-          "name": "action-ruby-v2.5"
+          "prefix": "DOCKER_IMAGE_PREFIX",
+          "name": "action-ruby-v2.5",
+          "tag": "DOCKER_IMG_TAG"
         },
         "deprecated": false,
         "attached": {
@@ -297,7 +377,9 @@
         "kind": "dotnet:3.1",
         "default": true,
         "image": {
-          "name": "action-dotnet-v3.1"
+          "prefix": "DOCKER_IMAGE_PREFIX",
+          "name": "action-dotnet-v3.1",
+          "tag": "DOCKER_IMG_TAG"
         },
         "deprecated": false,
         "attached": {
@@ -311,7 +393,9 @@
   },
   "blackboxes": [
     {
-      "name": "action-dockerskeleton"
+      "prefix": "DOCKER_IMAGE_PREFIX",
+      "name": "action-dockerskeleton",
+      "tag": "DOCKER_IMG_TAG"
     }
   ]
 }
