@@ -24,10 +24,35 @@
     "nodejs": [
       {
         "kind": "nodejs:10",
-        "default": true,
+        "default": false,
         "image": {
           "prefix": "DOCKER_IMAGE_PREFIX",
           "name": "action-nodejs-v10",
+          "tag": "DOCKER_IMG_TAG"
+        },
+        "stemCells": [
+          {
+            "count": 1,
+            "memory": "256 MB"
+          }
+        ],
+        "deprecated": false,
+        "attached": {
+          "attachmentName": "codefile",
+          "attachmentType": "text/plain"
+        },
+        "extensions": {
+          "js": {
+            "binary": false
+          }
+        }
+      },
+      {
+        "kind": "nodejs:14",
+        "default": true,
+        "image": {
+          "prefix": "DOCKER_IMAGE_PREFIX",
+          "name": "action-nodejs-v14",
           "tag": "DOCKER_IMG_TAG"
         },
         "stemCells": [
@@ -53,6 +78,25 @@
         "image": {
           "prefix": "DOCKER_IMAGE_PREFIX",
           "name": "action-nodejs-v10-lambda",
+          "tag": "DOCKER_IMG_TAG"
+        },
+        "deprecated": false,
+        "attached": {
+          "attachmentName": "codefile",
+          "attachmentType": "text/plain"
+        },
+        "extensions": {
+          "js": {
+            "binary": false
+          }
+        }
+      },
+      {
+        "kind": "nodejs-lambda:14",
+        "default": false,
+        "image": {
+          "prefix": "DOCKER_IMAGE_PREFIX",
+          "name": "action-nodejs-v14-lambda",
           "tag": "DOCKER_IMG_TAG"
         },
         "deprecated": false,
