@@ -31,6 +31,9 @@ const debug = makeDebug('nim:deployer:deploy')
 const seqDebug = makeDebug('nim:deployer:sequences')
 const rimraf = promisify(rimrafOrig)
 
+// Temp fix until https://github.com/apache/openwhisk-client-js/pull/225 is merged.
+type Exec = openwhisk.Exec & { image?: string }
+
 //
 // Main deploy logic, excluding that assigned to more specialized files
 //
@@ -442,6 +445,15 @@ function encodeParameters(normalParms: openwhisk.Dict, envParms: openwhisk.Dict)
   return ans
 }
 
+// Construct the Action.Exec struct from the deployment configuration values.
+export function calculateActionExec(action: ActionSpec, code: string): Exec {
+  if (action.docker) {
+    return { code, binary: action.binary, kind: 'blackbox', image: action.docker, main: action.main }
+  }
+
+  return { code, binary: action.binary, kind: action.runtime, main: action.main }
+}
+
 // Deploy an action when the code has already been read from a file or constructed programmatically or when the
 // action is a sequence (Sequence passed in lieu of code).
 async function deployActionFromCodeOrSequence(action: ActionSpec, spec: DeployStructure,
@@ -507,8 +519,8 @@ async function deployActionFromCodeOrSequence(action: ActionSpec, spec: DeploySt
   const annotDict = Object.assign({}, oldAnnots, annotations)
   // Compute the complete Action value for the call
   const params = encodeParameters(action.parameters, action.environment)
-  const exec = sequence || { code, binary: action.binary, kind: action.runtime, main: action.main } // Actually legal but openwhisk.Exec doesn't think so
-  const actionBody: openwhisk.Action = { annotations: keyVal(annotDict), parameters: params, exec: exec as openwhisk.Exec }
+  const exec = sequence || calculateActionExec(action, code)
+  const actionBody: openwhisk.Action = { annotations: keyVal(annotDict), parameters: params, exec: exec as Exec }
   if (action.limits) {
     actionBody.limits = action.limits
   }
