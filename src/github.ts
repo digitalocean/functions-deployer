@@ -16,7 +16,7 @@
 
 import * as Path from 'path'
 import * as fs from 'fs'
-import Octokit from '@octokit/rest'
+import Octokit = require('@octokit/rest');
 import rimrafOrig from 'rimraf'
 import { promisify } from 'util'
 import makeDebug from 'debug'

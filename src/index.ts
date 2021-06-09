@@ -33,5 +33,5 @@ export {
 export { cleanBucket, restore404Page, makeStorageClient } from './deploy-to-bucket'
 export { extFromRuntime, wskRequest, inBrowser, RuntimeTable, delay, writeSliceResult, getBestProjectName, isTextType, renamePackage, getExclusionList, isExcluded, SYSTEM_EXCLUDE_PATTERNS } from './util'
 export { GithubDef, isGithubRef, parseGithubRef, fetchProject } from './github'
-export { NimBaseCommand, NimLogger, parseAPIHost, NimFeedback, disambiguateNamespace, CaptureLogger } from './NimBaseCommand'
+export { NimBaseCommand, NimLogger, parseAPIHost, NimFeedback, disambiguateNamespace, CaptureLogger, setHelpHelper } from './NimBaseCommand'
 export { deleteSlice } from './slice-reader'

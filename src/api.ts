@@ -22,7 +22,7 @@ import {
 } from './util'
 import { openBucketClient } from './deploy-to-bucket'
 import { buildAllActions, buildWeb } from './finder-builder'
-import openwhisk from 'openwhisk'
+import openwhisk = require('openwhisk')
 import { getCredentialsForNamespace, getCredentials, Persister, recordNamespaceOwnership } from './credentials'
 import { makeIncluder } from './includer'
 import makeDebug from 'debug'
