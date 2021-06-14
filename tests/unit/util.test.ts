@@ -1,4 +1,5 @@
-import { validateDeployConfig } from "../../src/util";
+import { validateDeployConfig, loadProjectConfig } from "../../src/util";
+import { ProjectReader } from "../../src/deploy-struct";
 
 describe('test validation of deploy configuration', () => {
   test('should validate empty config', () => {
@@ -23,5 +24,26 @@ describe('test validation of deploy configuration', () => {
       action.docker = p
       expect(validateDeployConfig(config)).toBe("'docker' member of an 'action' must be a string")
     })
+  })
+})
+
+describe('test validation of loading project configuration', () => {
+  test('should return error with invalid config', async () => {
+    const reader = {
+      readFileContents: async function () {
+        return Promise.resolve('')
+      }
+    }
+    const result = await loadProjectConfig('project.yml', '', '', (reader as unknown) as ProjectReader, null)
+    expect(result.error.message).toBe(`Invalid project configuration file (project.yml): Cannot read property 'slice' of undefined`)
+  })
+  test('should parse minimal YAML file', async () => {
+    const reader = {
+      readFileContents: async function () {
+        return Promise.resolve('packages:')
+      }
+    }
+    const result = await loadProjectConfig('project.yml', '', '', (reader as unknown) as ProjectReader, null)
+    expect(result).toEqual({packages: null})
   })
 })

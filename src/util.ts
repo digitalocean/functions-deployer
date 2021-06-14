@@ -74,9 +74,13 @@ export function loadProjectConfig(configFile: string, envPath: string, filePath:
         return config
       }
     } catch (err) {
-      // Attempt to remove crufty overhead from js-yaml
-      const error = err.message ? new Error(err.message) : err
-      return errorStructure(error)
+      const errMsgPrefix = `Invalid project configuration file (${configFile})`
+      if (err.message) {
+        err.message = `${errMsgPrefix}: ${err.message}`
+      } else {
+        err.message = `${errMsgPrefix}`
+      }
+      return errorStructure(err)
     }
   })
 }
