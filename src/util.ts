@@ -44,8 +44,11 @@ export const SYSTEM_EXCLUDE_PATTERNS = ['.gitignore', '.DS_Store', '**/.git/**',
 ]
 
 // Flag indicating running in browser
-export const inBrowser = (typeof process === 'undefined') || (!process.release) || (process.release.name !== 'node')
+export let inBrowser = (typeof process === 'undefined') || (!process.release) || (process.release.name !== 'node')
 
+export function setInBrowserFlag(value: boolean): void {
+  inBrowser = value
+}
 //
 // General utilities
 //
@@ -88,13 +91,13 @@ export function loadProjectConfig(configFile: string, envPath: string, filePath:
 // Check whether a build field actually implies a build must be run
 function isRealBuild(buildField: string): boolean {
   switch (buildField) {
-  case 'build.sh':
-  case 'build.cmd':
-  case '.build':
-  case 'package.json':
-    return true
-  default:
-    return false
+    case 'build.sh':
+    case 'build.cmd':
+    case '.build':
+    case 'package.json':
+      return true
+    default:
+      return false
   }
 }
 
@@ -171,12 +174,12 @@ async function hasDefaultRemote(action: ActionSpec, reader: ProjectReader): Prom
   }
   const kind = runtime.split(':')[0]
   switch (kind) {
-  // TODO should this be an external table?
-  case 'go':
-  case 'swift':
-    return true
-  default:
-    return false
+    // TODO should this be an external table?
+    case 'go':
+    case 'swift':
+      return true
+    default:
+      return false
   }
 }
 
@@ -248,73 +251,73 @@ export function validateDeployConfig(arg: any): string {
   for (const item in arg) {
     if (!arg[item]) continue
     switch (item) {
-    case 'slice':
-      continue
-    case 'cleanNamespace':
-      if (!(typeof arg[item] === 'boolean')) {
-        return `${item} must be a boolean`
-      }
-      break
-    case 'targetNamespace': {
-      if (!(typeof (arg[item]) === 'string') && !isValidOwnership(arg[item])) {
-        return `${item} must be a string or a dictionary containing 'test' and/or 'production' members`
-      }
-      break
-    }
-    case 'web': {
-      if (!Array.isArray(arg[item])) {
-        return 'web member must be an array'
-      }
-      for (const subitem of arg[item]) {
-        const webError = validateWebResource(subitem)
-        if (webError) {
-          return webError
+      case 'slice':
+        continue
+      case 'cleanNamespace':
+        if (!(typeof arg[item] === 'boolean')) {
+          return `${item} must be a boolean`
         }
-      }
-      break
-    }
-    case 'packages': {
-      if (!Array.isArray(arg[item])) {
-        return 'packages member must be an array'
-      }
-      for (const subitem of arg[item]) {
-        const pkgError = validatePackageSpec(subitem)
-        if (pkgError) {
-          return pkgError
+        break
+      case 'targetNamespace': {
+        if (!(typeof (arg[item]) === 'string') && !isValidOwnership(arg[item])) {
+          return `${item} must be a string or a dictionary containing 'test' and/or 'production' members`
         }
+        break
       }
-      break
-    }
-    case 'actionWrapPackage': {
-      if (!(typeof arg[item] === 'string')) {
-        return `${item} member must be a string`
+      case 'web': {
+        if (!Array.isArray(arg[item])) {
+          return 'web member must be an array'
+        }
+        for (const subitem of arg[item]) {
+          const webError = validateWebResource(subitem)
+          if (webError) {
+            return webError
+          }
+        }
+        break
       }
-      haveActionWrap = arg[item].length > 0
-      break
-    }
-    case 'bucket': {
-      haveBucket = true
-      const optionsError = validateBucketSpec(arg[item])
-      if (optionsError) {
-        return optionsError
+      case 'packages': {
+        if (!Array.isArray(arg[item])) {
+          return 'packages member must be an array'
+        }
+        for (const subitem of arg[item]) {
+          const pkgError = validatePackageSpec(subitem)
+          if (pkgError) {
+            return pkgError
+          }
+        }
+        break
       }
-      break
-    }
-    case 'parameters':
-    case 'environment': {
-      if (!isDictionary(arg[item])) {
-        return `${item} member must be a dictionary`
+      case 'actionWrapPackage': {
+        if (!(typeof arg[item] === 'string')) {
+          return `${item} member must be a string`
+        }
+        haveActionWrap = arg[item].length > 0
+        break
       }
-      break
-    }
-    case 'credentials':
-    case 'flags':
-    case 'deployerAnnotation':
-      if (slice) continue
+      case 'bucket': {
+        haveBucket = true
+        const optionsError = validateBucketSpec(arg[item])
+        if (optionsError) {
+          return optionsError
+        }
+        break
+      }
+      case 'parameters':
+      case 'environment': {
+        if (!isDictionary(arg[item])) {
+          return `${item} member must be a dictionary`
+        }
+        break
+      }
+      case 'credentials':
+      case 'flags':
+      case 'deployerAnnotation':
+        if (slice) continue
       // In a slice we accept these without further validation; otherwise, they are illegal
       // Otherwise, fall through
-    default:
-      return `Invalid key '${item}' found in project.yml`
+      default:
+        return `Invalid key '${item}' found in project.yml`
     }
   }
   if (haveActionWrap && haveBucket) {
@@ -337,28 +340,28 @@ function isValidOwnership(item: any): boolean {
 function validateBucketSpec(arg: Record<string, any>): string {
   for (const item in arg) {
     switch (item) {
-    case 'prefixPath':
-    case 'mainPageSuffix':
-    case 'notFoundPage':
-      if (!(typeof arg[item] === 'string')) {
-        return `'${item}' member of 'bucket' must be a string`
-      }
-      break
-    case 'strip':
-      if (!(typeof arg[item] === 'number')) {
-        return `'${item}' member of 'bucket' must be a number`
-      }
-      break
-    case 'clean':
-    case 'useCache':
-    case 'remoteBuild':
-    case 'localBuild':
-      if (!(typeof arg[item] === 'boolean')) {
-        return `'${item}' member of 'bucket' must be a boolean`
-      }
-      break
-    default:
-      return `Invalid key '${item}' found in 'bucket' in project.yml`
+      case 'prefixPath':
+      case 'mainPageSuffix':
+      case 'notFoundPage':
+        if (!(typeof arg[item] === 'string')) {
+          return `'${item}' member of 'bucket' must be a string`
+        }
+        break
+      case 'strip':
+        if (!(typeof arg[item] === 'number')) {
+          return `'${item}' member of 'bucket' must be a number`
+        }
+        break
+      case 'clean':
+      case 'useCache':
+      case 'remoteBuild':
+      case 'localBuild':
+        if (!(typeof arg[item] === 'boolean')) {
+          return `'${item}' member of 'bucket' must be a boolean`
+        }
+        break
+      default:
+        return `Invalid key '${item}' found in 'bucket' in project.yml`
     }
   }
   return undefined
@@ -368,11 +371,11 @@ function validateBucketSpec(arg: Record<string, any>): string {
 function validateWebResource(arg: Record<string, any>): string {
   for (const item in arg) {
     switch (item) {
-    case 'simpleName':
-    case 'mimeType':
-      break
-    default:
-      return `Invalid key '${item}' found in 'web' in project.yml`
+      case 'simpleName':
+      case 'mimeType':
+        break
+      default:
+        return `Invalid key '${item}' found in 'web' in project.yml`
     }
     if (!(typeof arg[item] === 'string')) {
       return `'${item}' member of a 'web' must be a string`
@@ -434,63 +437,63 @@ function validateActionSpec(arg: Record<string, any>): string {
   for (const item in arg) {
     if (!arg[item]) continue
     switch (item) {
-    case 'name':
-    case 'file':
-    case 'runtime':
-    case 'main':
-    case 'docker':
-      if (!(typeof arg[item] === 'string')) {
-        return `'${item}' member of an 'action' must be a string`
+      case 'name':
+      case 'file':
+      case 'runtime':
+      case 'main':
+      case 'docker':
+        if (!(typeof arg[item] === 'string')) {
+          return `'${item}' member of an 'action' must be a string`
+        }
+        if (item === 'runtime' && !validateRuntime(arg[item])) {
+          return `'${arg[item]}' is not a valid runtime value`
+        }
+        break
+      case 'binary':
+      case 'clean':
+      case 'remoteBuild':
+      case 'localBuild':
+        if (!(typeof arg[item] === 'boolean')) {
+          return `'${item}' member of an 'action' must be a boolean`
+        }
+        break
+      case 'sequence':
+        if (!Array.isArray(arg[item]) || arg[item].length === 0 || (typeof arg[item][0]) !== 'string') {
+          return `'${item}' member of an 'action' must be an array of one or more strings naming actions`
+        }
+        break
+      case 'web':
+        if (!(typeof arg[item] === 'boolean' || arg[item] === 'raw')) {
+          return `${item} member of an 'action' must be a boolean or the string 'raw'`
+        }
+        break
+      case 'webSecure':
+        if (!(typeof arg[item] === 'boolean' || typeof arg[item] === 'string')) {
+          return `'${item}' member of an 'action' must be a boolean or a string`
+        }
+        break
+      case 'environment': {
+        const envError = validateEnvironment(arg[item])
+        if (envError) {
+          return envError
+        }
       }
-      if (item === 'runtime' && !validateRuntime(arg[item])) {
-        return `'${arg[item]}' is not a valid runtime value`
+      // falls through
+      case 'annotations':
+      case 'parameters':
+        if (!isDictionary(arg[item])) {
+          return `${item} must be a dictionary`
+        }
+        break
+      case 'limits': {
+        const limitsError = validateLimits(arg[item])
+        if (limitsError) {
+          return limitsError
+        }
+        break
       }
-      break
-    case 'binary':
-    case 'clean':
-    case 'remoteBuild':
-    case 'localBuild':
-      if (!(typeof arg[item] === 'boolean')) {
-        return `'${item}' member of an 'action' must be a boolean`
-      }
-      break
-    case 'sequence':
-      if (!Array.isArray(arg[item]) || arg[item].length === 0 || (typeof arg[item][0]) !== 'string') {
-        return `'${item}' member of an 'action' must be an array of one or more strings naming actions`
-      }
-      break
-    case 'web':
-      if (!(typeof arg[item] === 'boolean' || arg[item] === 'raw')) {
-        return `${item} member of an 'action' must be a boolean or the string 'raw'`
-      }
-      break
-    case 'webSecure':
-      if (!(typeof arg[item] === 'boolean' || typeof arg[item] === 'string')) {
-        return `'${item}' member of an 'action' must be a boolean or a string`
-      }
-      break
-    case 'environment': {
-      const envError = validateEnvironment(arg[item])
-      if (envError) {
-        return envError
-      }
-    }
-    // falls through
-    case 'annotations':
-    case 'parameters':
-      if (!isDictionary(arg[item])) {
-        return `${item} must be a dictionary`
-      }
-      break
-    case 'limits': {
-      const limitsError = validateLimits(arg[item])
-      if (limitsError) {
-        return limitsError
-      }
-      break
-    }
-    default:
-      return `Invalid key '${item}' found in 'action' clause in project.yml`
+      default:
+        return `Invalid key '${item}' found in 'action' clause in project.yml`
     }
   }
   return undefined
@@ -515,15 +518,15 @@ function validateLimits(arg: any): string {
   for (const item in arg) {
     const value = arg[item]
     switch (item) {
-    case 'timeout':
-    case 'memory':
-    case 'logs':
-      if (typeof value !== 'number') {
-        return `'${item}' member of a 'limits' clause must be a number`
-      }
-      break
-    default:
-      return `Invalid key '${item}' found in 'limits' clause in project.yml`
+      case 'timeout':
+      case 'memory':
+      case 'logs':
+        if (typeof value !== 'number') {
+          return `'${item}' member of a 'limits' clause must be a number`
+        }
+        break
+      default:
+        return `Invalid key '${item}' found in 'limits' clause in project.yml`
     }
   }
   return undefined
@@ -682,28 +685,28 @@ function getNameAndMid(parts: string[]): string[] {
 // The following tables are populated (once) by reading a copy of runtimes.json
 
 // Table of extensions, providing the unqualified runtime 'kind' for each extension
-type ExtensionToRuntime = { [ key: string]: string }
-const extTable: ExtensionToRuntime = { }
+type ExtensionToRuntime = { [key: string]: string }
+const extTable: ExtensionToRuntime = {}
 
 // Table of extensions, saying whether the extension implies binary or not
-type ExtensionToBinary = { [ key: string]: boolean }
+type ExtensionToBinary = { [key: string]: boolean }
 const extBinaryTable: ExtensionToBinary = {
   zip: true
 }
 
 // A map from actual runtime names, full colon-separated syntax, to lists of possible extensions
-type RuntimeToExtensions = { [ key: string]: string[] }
-const validRuntimes: RuntimeToExtensions = { }
+type RuntimeToExtensions = { [key: string]: string[] }
+const validRuntimes: RuntimeToExtensions = {}
 
 // A map from unqualified runtime name to the default kind for that runtime name
-const defaultTable: Record<string, string> = { }
+const defaultTable: Record<string, string> = {}
 
 // Provide information from runtimes.json, reading it at most once
 let runtimesRead = false
 type ExtensionDetail = { binary: boolean }
-type ExtensionEntry = { [ key: string]: ExtensionDetail }
+type ExtensionEntry = { [key: string]: ExtensionDetail }
 export type RuntimeEntry = { kind: string, default: boolean, extensions: ExtensionEntry }
-export type RuntimeTable = { [ key: string ]: RuntimeEntry[] }
+export type RuntimeTable = { [key: string]: RuntimeEntry[] }
 function initRuntimes() {
   if (!runtimesRead) {
     runtimesRead = true
@@ -1006,10 +1009,10 @@ export function convertPairsToResources(pairs: string[][]): WebResource[] {
 
 // Types for the map versions of the PackageSpec and ActionSpec types
 export interface PackageMap {
-    [ key: string]: PackageSpec
+  [key: string]: PackageSpec
 }
 export interface ActionMap {
-    [ key: string]: ActionSpec
+  [key: string]: ActionSpec
 }
 
 // Turn a PackageSpec array into a PackageMap
@@ -1130,8 +1133,8 @@ export function generateSecret(): string {
 // The workbench 'project deploy' command will never set this flag
 // Developers using the deployProject CLI may set this flag but presumably will only do so by intention.
 export function saveUsFromOurselves(namespace: string, apihost: string): boolean {
-  let sensitiveNamespaces : string[]
-  let productionProjects : string[]
+  let sensitiveNamespaces: string[]
+  let productionProjects: string[]
   try {
     sensitiveNamespaces = require('../sensitiveNamespaces.json')
     productionProjects = require('../productionProjects.json')
@@ -1177,18 +1180,18 @@ function digestDictionary(hash: crypto.Hash, toDigest: Record<string, any>) {
       hash.update(key)
       const value = toDigest[key]
       switch (typeof value) {
-      case 'string':
-        hash.update(value)
-        break
-      case 'boolean':
-        digestBoolean(hash, value)
-        break
-      case 'object':
-        digestDictionary(hash, value)
-        break
-      default: // number, bigint ... and some exotic cases  TODO: need we do better?
-        hash.update(String(value))
-        break
+        case 'string':
+          hash.update(value)
+          break
+        case 'boolean':
+          digestBoolean(hash, value)
+          break
+        case 'object':
+          digestDictionary(hash, value)
+          break
+        default: // number, bigint ... and some exotic cases  TODO: need we do better?
+          hash.update(String(value))
+          break
       }
     }
   }
@@ -1301,13 +1304,13 @@ export function loadVersions(projectPath: string, namespace: string, apihost: st
 
 // Introduce small delay
 export function delay(millis: number): Promise<void> {
-  return new Promise(function(resolve) {
+  return new Promise(function (resolve) {
     setTimeout(() => resolve(), millis)
   })
 }
 
 // Await the completion of an action invoke (similar to kui's await)
-export async function waitForActivation(id: string, wsk: Client, waiting: ()=>void): Promise<Activation<Dict>> {
+export async function waitForActivation(id: string, wsk: Client, waiting: () => void): Promise<Activation<Dict>> {
   debug(`waiting for activation with id ${id}`)
   for (let i = 1; i < 151; i++) {
     try {
@@ -1333,12 +1336,12 @@ export async function waitForActivation(id: string, wsk: Client, waiting: ()=>vo
 // to invoke web actions, with or without auth needed.
 export function wskRequest(url: string, auth: string = undefined): Promise<any> {
   debug('Request to: %s', url)
-  return new Promise(function(resolve, reject) {
+  return new Promise(function (resolve, reject) {
     const xhr = new XMLHttpRequest()
     xhr.open('GET', url)
     const userAgent = getUserAgent()
     xhr.setRequestHeader('User-Agent', userAgent)
-    xhr.onload = function() {
+    xhr.onload = function () {
       if (this.status >= 200 && this.status < 300) {
         debug('useful response')
         resolve(JSON.parse(xhr.responseText))
@@ -1347,7 +1350,7 @@ export function wskRequest(url: string, auth: string = undefined): Promise<any> 
         reject(new Error(xhr.responseText))
       }
     }
-    xhr.onerror = function() {
+    xhr.onerror = function () {
       debug('network error')
       reject(new Error('Network error'))
     }
