@@ -19,7 +19,7 @@ import {
   CredentialStore, CredentialEntry, CredentialHostMap, Credentials, CredentialRow, Feedback
 } from './deploy-struct'
 import createDebug from 'debug'
-import { wskRequest, inBrowser } from './util'
+import { wskRequest, setInBrowserFlag } from './util'
 import { getStorageProvider, StorageKey } from '@nimbella/storage'
 const debug = createDebug('nimbella.cli')
 
@@ -49,10 +49,10 @@ function credentialStore() {
 
 // The type of a persistance manager, which will differ between cloud and local
 export interface Persister {
-    loadCredentialStoreIfPresent: () => CredentialStore
-    loadCredentialStore: () => Promise<CredentialStore>
-    saveCredentialStore: (store: CredentialStore) => void
-    saveLegacyInfo: (apihost: string, auth: string) => void
+  loadCredentialStoreIfPresent: () => CredentialStore
+  loadCredentialStore: () => Promise<CredentialStore>
+  saveCredentialStore: (store: CredentialStore) => void
+  saveLegacyInfo: (apihost: string, auth: string) => void
 }
 
 // The persister to use when local storage is accessible (deployer CLI or non-cloud workbench)
@@ -67,9 +67,11 @@ export const browserPersister: Persister = {
 }
 // The persister to use for all auth code if you might run in either CLI or browser
 // Not a constant so that it can be explicitly set in the workbench
+const inBrowser =  (typeof process === 'undefined') || (!process.release) || (process.release.name !== 'node')
 export let authPersister = inBrowser ? browserPersister : fileSystemPersister
 // For explicitly setting in workbench
 export function setInBrowser(): void {
+  setInBrowserFlag(true)
   authPersister = browserPersister
 }
 
@@ -90,7 +92,7 @@ export function addCredential(store: CredentialStore, apihost: string, namespace
 }
 
 // Remove a namespace from the credential store
-export async function forgetNamespace(namespace: string, apihost: string|undefined, persister: Persister, feedback: Feedback): Promise<Credentials> {
+export async function forgetNamespace(namespace: string, apihost: string | undefined, persister: Persister, feedback: Feedback): Promise<Credentials> {
   const store = await persister.loadCredentialStore()
   const creds = getUniqueCredentials(namespace, apihost, store)
   const host = apihost || creds.ow.apihost
@@ -125,7 +127,7 @@ export async function forgetNamespace(namespace: string, apihost: string|undefin
 //   - if there is just one occurrence, the switch is to that namespace on that API host
 //   - otherwise, no switch occurs and the thrown Error either states that no credentials exist for that namespace
 //     or that the --apihost flag is required to indicate which one is intended
-export async function switchNamespace(namespace: string, apihost: string|undefined, persister: Persister): Promise<Credentials> {
+export async function switchNamespace(namespace: string, apihost: string | undefined, persister: Persister): Promise<Credentials> {
   const store = await persister.loadCredentialStore()
   const answer = getUniqueCredentials(namespace, apihost, store)
   const newHost = answer.ow.apihost
@@ -167,7 +169,7 @@ export function getCredentialsFromEnvironment(): Credentials {
 
 // Get the credentials for a namespace.  Similar logic to switchNamespace but does not change which
 // namespace is considered current.
-export async function getCredentialsForNamespace(namespace: string, apihost: string|undefined, persister: Persister): Promise<Credentials> {
+export async function getCredentialsForNamespace(namespace: string, apihost: string | undefined, persister: Persister): Promise<Credentials> {
   const store = await persister.loadCredentialStore()
   return getUniqueCredentials(namespace, apihost, store)
 }
@@ -219,9 +221,9 @@ export async function recordNamespaceOwnership(project: string, namespace: strin
 }
 
 // Provide contents of the CredentialStore in a dictionary style suitable for listing and tabular presentation
-export async function getCredentialDict(persister: Persister): Promise<{[host: string]: CredentialRow[]}> {
+export async function getCredentialDict(persister: Persister): Promise<{ [host: string]: CredentialRow[] }> {
   const store = await persister.loadCredentialStore()
-  const result: {[host: string]: CredentialRow[]} = {}
+  const result: { [host: string]: CredentialRow[] } = {}
   for (const apihost in store.credentials) {
     let rows: CredentialRow[] = []
     for (const namespace in store.credentials[apihost]) {
@@ -256,7 +258,7 @@ export function getNamespace(host: string, auth: string): Promise<string> {
 }
 
 // Get current namespace
-export async function getCurrentNamespace(persister: Persister): Promise<string|undefined> {
+export async function getCurrentNamespace(persister: Persister): Promise<string | undefined> {
   debug('getting current namespace')
   const store = await persister.loadCredentialStore()
   return store.currentNamespace
@@ -358,8 +360,8 @@ function saveWskProps(apihost: string, auth: string) {
 // Given a namespace and _optionally_ an apihost, return the credentials, throwing errors based on the
 // number of matches.  Used in cases where the credentials are expected to exist but the client may or
 // may not have provided an API host
-function getUniqueCredentials(namespace: string, apihost: string|undefined, store: CredentialStore): Credentials {
-  const possibles: {[key: string]: CredentialEntry} = {}
+function getUniqueCredentials(namespace: string, apihost: string | undefined, store: CredentialStore): Credentials {
+  const possibles: { [key: string]: CredentialEntry } = {}
   let credentialEntry: CredentialEntry
   let newHost: string
   for (const host in store.credentials) {
@@ -424,7 +426,7 @@ export async function addCommanderData(apihost: string, namespace: string, data:
 // GitHub credentials section
 
 // Retrieve a list of locally known github accounts
-export async function getGithubAccounts(persister: Persister): Promise<{[key: string]: string}> {
+export async function getGithubAccounts(persister: Persister): Promise<{ [key: string]: string }> {
   const store = await persister.loadCredentialStore()
   debug('GitHub accounts requested, returning %O', store.github)
   return store.github || {}
@@ -483,14 +485,14 @@ export async function addGithubAccount(name: string, token: string, persister: P
 // Postman credentials section
 
 // Retrieve a list of locally known postman keys
-export async function getPostmanKeys(persister: Persister): Promise<{[key: string]: string}> {
+export async function getPostmanKeys(persister: Persister): Promise<{ [key: string]: string }> {
   const store = await persister.loadCredentialStore()
   debug('Postman keys requested, returning %O', store.postman)
   return store.postman || {}
 }
 
 // Retrieve current key
-export async function getPostmanCurrentKey(persister: Persister): Promise<string|undefined> {
+export async function getPostmanCurrentKey(persister: Persister): Promise<string | undefined> {
   const store = await persister.loadCredentialStore()
   debug('Postman current key requested, returning %O', store.currentPostman)
   return store.currentPostman
