@@ -6,9 +6,6 @@ export const API_ENDPOINT = '/api/v1'
 type RuntimeLabel = string
 type RuntimeKind = string
 type RuntimeFileExtension = string
-type isBinaryFile = boolean
-
-export type RuntimeExtension = Record<RuntimeFileExtension, isBinaryFile> 
 
 export interface Runtime {
   kind: RuntimeKind 
@@ -20,17 +17,20 @@ export type RuntimesConfig = Record<RuntimeLabel, Runtime[]>
 // List of file extensions for runtimes. This hardcoded list used to be present
 // in the extensions field of the runtimes.json document.
 const FileExtensionRuntimes: Record<RuntimeFileExtension, RuntimeKind> = {
-  '.rs': 'rust',
-  '.js': 'nodejs',
-  '.py': 'python',
-  '.ts': 'typescript',
-  '.java': 'java',
-  '.jar': 'java',
-  '.go': 'go',
-  '.swift': 'swift',
-  '.php': 'swift',
-  '.rb': 'swift',
+  'rs': 'rust',
+  'js': 'nodejs',
+  'py': 'python',
+  'ts': 'typescript',
+  'java': 'java',
+  'jar': 'java',
+  'go': 'go',
+  'swift': 'swift',
+  'php': 'php',
+  'rb': 'ruby',
 }
+
+// File extensions which imply binary data
+const BinaryFileExtensions: Set<RuntimeFileExtension> = new Set<RuntimeFileExtension>(['zip', 'jar'])
 
 // Send HTTP request to platform endpoint for runtimes configuration
 export async function fromPlatform(httpClient: AxiosInstance, platformUrl: string) {
@@ -73,9 +73,21 @@ export function parseValidRuntimes(config: RuntimesConfig): Set<RuntimeKind> {
 }
 
 export function runtimeForFileExtension(fileExtension: RuntimeFileExtension): RuntimeKind | undefined {
-  return FileExtensionRuntimes[fileExtension]
+  const runtime = FileExtensionRuntimes[fileExtension]
+  return runtime ? `${runtime}:default` : runtime
 }
 
-// TODO: Runtime to extensions
-// TODO: Runtime to binary extensions
+export function isBinaryFileExtension(fileExtension: RuntimeFileExtension): boolean {
+  return BinaryFileExtensions.has(fileExtension)
+}
+
+export function fileExtensionForRuntime(runtime: RuntimeKind, isBinaryExtension: boolean) {
+  const isSameRuntime = (r: string): boolean => runtime.startsWith(r)
+  const isValidRuntime = Object.values(FileExtensionRuntimes).some(isSameRuntime)
+  if (!isValidRuntime) throw new Error(`Invalid runtime ${runtime} encountered`)
+
+  const extFromEntry = (entry?: unknown[]): unknown | undefined => Array.isArray(entry) ? entry[0] : entry
+  const extRuntimes = Object.entries(FileExtensionRuntimes).filter(([ext]: string[]) => BinaryFileExtensions.has(ext) === isBinaryExtension)
+  return extFromEntry(extRuntimes.find(([_, r]) => isSameRuntime(r)))
+}
 // Re-factor / remove all the code in runtimes.json

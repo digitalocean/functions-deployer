@@ -1,4 +1,4 @@
-import { fromPlatform, parseValidRuntimes, API_ENDPOINT, RuntimesConfig } from '../../src/runtimes'
+import { fromPlatform, parseValidRuntimes, API_ENDPOINT, RuntimesConfig, runtimeForFileExtension, isBinaryFileExtension, fileExtensionForRuntime } from '../../src/runtimes'
 import axios from 'axios'
 import { mocked } from 'ts-jest/utils'
 
@@ -164,9 +164,87 @@ describe('test parsing valid runtimes', () => {
 })
 
 describe('test determing runtime for an extension', () => {
-  test('should return runtimes for hardcoded extensions', async () => {
+  test('should return runtimes for hardcoded extensions', () => {
+    const known_runtimes = {
+      'rs': 'rust:default',
+      'js': 'nodejs:default',
+      'py': 'python:default',
+      'ts': 'typescript:default',
+      'java': 'java:default',
+      'jar': 'java:default',
+      'go': 'go:default',
+      'swift': 'swift:default',
+      'php': 'php:default',
+      'rb': 'ruby:default',
+    }
+
+    for (let [extension, runtime] of Object.entries(known_runtimes)) {
+      expect(runtimeForFileExtension(extension)).toEqual(runtime)
+    }
   })
 
-  test('should return undefined for unknown runtime', async () => {
+  test('should return undefined for unknown runtime', () => {
+    expect(runtimeForFileExtension('unknown')).toEqual(undefined)
   })
 })
+
+describe('test does file extension imply binary data', () => {
+  test('should return true for binary file extensions', () => {
+    const binary_extensions = [ 'jar', 'zip' ]
+
+    for (let ext of binary_extensions) {
+      expect(isBinaryFileExtension(ext)).toEqual(true)
+    }
+  })
+
+  test('should return false for non-binary file extensions', () => {
+    const nonbinary_extensions = [
+      'rs', 'js', 'py', 'ts', 'java', 'go', 'swift', 'php', 'rb', 'unknown'
+    ]
+
+    for (let ext of nonbinary_extensions) {
+      expect(isBinaryFileExtension(ext)).toEqual(false)
+    }
+  })
+})
+
+describe('test determing extension from runtime', () => {
+  test('should return extensions for known non-binary runtimes (version & default)', () => {
+    const known_runtimes = {
+      'rust': 'rs',
+      'nodejs': 'js',
+      'python': 'py',
+      'typescript': 'ts',
+      'java': 'java',
+      'go': 'go',
+      'swift': 'swift',
+      'php': 'php',
+      'ruby': 'rb'
+    }
+    for (let [runtime, extension] of Object.entries(known_runtimes)) {
+      expect(fileExtensionForRuntime(`${runtime}:10`, false)).toEqual(extension)
+      expect(fileExtensionForRuntime(`${runtime}:default`, false)).toEqual(extension)
+    }
+  }) 
+  test('should return extensions for known binary runtimes (version & default)', () => {
+    const known_runtimes = {
+      'java': 'jar'
+    }
+    for (let [runtime, extension] of Object.entries(known_runtimes)) {
+      expect(fileExtensionForRuntime(`${runtime}:10`, true)).toEqual(extension)
+      expect(fileExtensionForRuntime(`${runtime}:default`, true)).toEqual(extension)
+    }
+  }) 
+
+  test('should return undefined for unknown runtimes', () => {
+    expect(() => fileExtensionForRuntime('unknown:10', false)).toThrow(`Invalid runtime unknown:10 encountered`)
+    expect(() => fileExtensionForRuntime('unknown:default', false)).toThrow(`Invalid runtime unknown:default encountered`)
+
+    expect(() => fileExtensionForRuntime('unknown:10', true)).toThrow(`Invalid runtime unknown:10 encountered`)
+
+    expect(() => fileExtensionForRuntime('unknown:default', true)).toThrow(`Invalid runtime unknown:default encountered`)
+  })
+  test('should return undefined for incorrect binary runtimes', () => {
+    expect(fileExtensionForRuntime(`nodejs:default`, true)).toEqual(undefined)
+  })
+}) 
