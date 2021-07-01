@@ -1,4 +1,4 @@
-import { fromPlatform, parseValidRuntimes, API_ENDPOINT, RuntimesConfig, runtimeForFileExtension, isBinaryFileExtension, fileExtensionForRuntime } from '../../src/runtimes'
+import { fromPlatform, parseValidRuntimes, API_ENDPOINT, RuntimesConfig, runtimeForFileExtension, isBinaryFileExtension, fileExtensionForRuntime, runtimeForZipMid, canonicalRuntime, parseDefaultRuntimes } from '../../src/runtimes'
 import axios from 'axios'
 import { mocked } from 'ts-jest/utils'
 
@@ -163,6 +163,30 @@ describe('test parsing valid runtimes', () => {
   })
 })
 
+describe('test parsing default runtimes lookup', () => {
+  test('should create map of runtimes from default kinds in runtime configuration', () => {
+    const config: RuntimesConfig = {
+      nodejs: [
+        { "kind": "nodejs:10" },
+        { "kind": "nodejs:14", default: true },
+      ],
+      python: [
+        { "kind": "python:2" },
+        { "kind": "python:3", default: true },
+      ],
+      java: [
+        { "kind": "java:8" }
+      ]
+    }
+
+    const defaultRuntimes = parseDefaultRuntimes(config)
+    expect(defaultRuntimes).toEqual({
+      'nodejs': 'nodejs:14', 
+      'python': 'python:3', 
+    })
+  })
+})
+
 describe('test determing runtime for an extension', () => {
   test('should return runtimes for hardcoded extensions', () => {
     const known_runtimes = {
@@ -248,3 +272,31 @@ describe('test determing extension from runtime', () => {
     expect(fileExtensionForRuntime(`nodejs:default`, true)).toEqual(undefined)
   })
 }) 
+
+describe('test determing runtime from mid string', () => {
+  test('should return undefined for unknown runtimes', () => {
+    const runtimes = new Set<string>()
+    expect(runtimeForZipMid(runtimes, `runtime`)).toEqual(undefined)
+    expect(runtimeForZipMid(runtimes, `runtime-10`)).toEqual(undefined)
+  })
+  test('should return runtimes for known runtimes', () => {
+    const runtimes = new Set(['runtime:default', 'runtime:10'])
+    expect(runtimeForZipMid(runtimes, `runtime`)).toEqual('runtime:default')
+    expect(runtimeForZipMid(runtimes, `runtime-10`)).toEqual('runtime:10')
+  })
+})
+
+describe('test determining canonical runtime', () => {
+  test('should return default runtime without explicit version', () => {
+    const defaults = { 'runtime': 'runtime:10' }
+    expect(canonicalRuntime(defaults, 'runtime:default')).toEqual('runtime:10')
+  })
+  test('should runtime with explicit version', () => {
+    const defaults = { 'runtime': 'runtime:12' }
+    expect(canonicalRuntime(defaults, 'runtime:10')).toEqual('runtime:10')
+  })
+  test('should return undefined for non-existing default runtime', () => {
+    const defaults = { }
+    expect(canonicalRuntime(defaults, 'runtime:default')).toEqual(undefined)
+  })
+})
