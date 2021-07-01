@@ -31,6 +31,7 @@ import makeDebug from 'debug'
 import anymatch from 'anymatch'
 import { parseGithubRef } from './github'
 import { nimbellaDir } from './credentials'
+import {ParsedRuntimeConfig, isBinaryFileExtension, runtimeForZipMid, runtimeForFileExtension} from './runtimes'
 const debug = makeDebug('nim:deployer:util')
 
 // List of files/paths to be ignored, add https://github.com/micromatch/anymatch compatible definitions
@@ -54,8 +55,8 @@ export function setInBrowserFlag(value: boolean): void {
 //
 
 // Read the project config file, with validation
-export function loadProjectConfig(configFile: string, envPath: string, filePath: string, reader: ProjectReader,
-  feedback: Feedback): Promise<DeployStructure> {
+export async function loadProjectConfig(configFile: string, envPath: string, filePath: string, reader: ProjectReader,
+  feedback: Feedback, runtimesConfig: ParsedRuntimeConfig): Promise<DeployStructure> {
   return reader.readFileContents(configFile).then(async data => {
     try {
       const content = substituteFromEnvAndFiles(String(data), envPath, filePath, feedback)
@@ -69,7 +70,7 @@ export function loadProjectConfig(configFile: string, envPath: string, filePath:
           config = yaml.safeLoad(content) as Record<string, any>
         }
       }
-      const configError = validateDeployConfig(config)
+      const configError = validateDeployConfig(config, runtimesConfig)
       if (configError) {
         throw new Error(configError)
       } else {
@@ -110,7 +111,7 @@ function locateBuild(buildField: string, remoteRequested: boolean, remoteRequire
 }
 
 // Set up the build fields for a project and detect conflicts.  Determine if local building is required.
-export async function checkBuildingRequirements(todeploy: DeployStructure, requestRemote: boolean): Promise<boolean> {
+export async function checkBuildingRequirements(todeploy: DeployStructure, requestRemote: boolean, runtimes: ParsedRuntimeConfig): Promise<boolean> {
   const checkConflicts = (buildField: string, remote: boolean, local: boolean, tag: string) => {
     if (remote && local) {
       throw new Error(`Local and remote building cannot both be required (${tag})`)
@@ -143,7 +144,7 @@ export async function checkBuildingRequirements(todeploy: DeployStructure, reque
         for (const action of pkg.actions) {
           action.build = locateBuild(action.build, requestRemote, action.remoteBuild, action.localBuild)
           if (requestRemote && action.build !== 'remote') {
-            if (await hasDefaultRemote(action, todeploy.reader)) {
+            if (await hasDefaultRemote(action, todeploy.reader, runtimes)) {
               action.build = 'remote-default'
               continue // does not effect needsLocal
             }
@@ -159,15 +160,15 @@ export async function checkBuildingRequirements(todeploy: DeployStructure, reque
 // Determine if an action has a default remote build.  This depends on the action's 'kind': currently, swift and go have a
 // default remote build while other languages do not.   This function is designed to be called before the runtime is otherwise
 // known so it is prepared to peek into the project to figure out the operative runtime.
-async function hasDefaultRemote(action: ActionSpec, reader: ProjectReader): Promise<boolean> {
+async function hasDefaultRemote(action: ActionSpec, reader: ProjectReader, runtimes: ParsedRuntimeConfig): Promise<boolean> {
   let runtime = action.runtime
   if (!runtime) {
     const pathKind = await reader.getPathKind(action.file)
     if (pathKind.isFile) {
-      ({ runtime } = actionFileToParts(pathKind.name))
+      ({ runtime } = actionFileToParts(pathKind.name, runtimes))
     } else if (pathKind.isDirectory) {
       const files = await promiseFilesAndFilterFiles(action.file, reader)
-      runtime = agreeOnRuntime(files)
+      runtime = agreeOnRuntime(files, runtimes)
     } else {
       return false
     }
@@ -185,10 +186,10 @@ async function hasDefaultRemote(action: ActionSpec, reader: ProjectReader): Prom
 
 // Check whether a list of names that are candidates for zipping can agree on a runtime.  This is called only when the
 // config doesn't already provide a runtime or on the raw material in the case of remote builds.
-export function agreeOnRuntime(items: string[]): string {
+export function agreeOnRuntime(items: string[], runtimes: ParsedRuntimeConfig): string {
   let agreedRuntime: string
   items.forEach(item => {
-    const { runtime } = actionFileToParts(item)
+    const { runtime } = actionFileToParts(item, runtimes)
     if (runtime) {
       if (agreedRuntime && runtime !== agreedRuntime) {
         return undefined
@@ -245,7 +246,7 @@ function removeEmptyStringMembersFromPackages(packages: PackageSpec[]) {
 
 // Validation for DeployStructure read from disk.  Note: this may be any valid DeployStructure except that the strays member
 // is not expected in this context.  TODO return a list of errors not just the first error.
-export function validateDeployConfig(arg: any): string {
+export function validateDeployConfig(arg: any, runtimesConfig: ParsedRuntimeConfig): string {
   let haveActionWrap = false; let haveBucket = false
   const slice = !!arg.slice
   for (const item in arg) {
@@ -281,7 +282,7 @@ export function validateDeployConfig(arg: any): string {
           return 'packages member must be an array'
         }
         for (const subitem of arg[item]) {
-          const pkgError = validatePackageSpec(subitem)
+          const pkgError = validatePackageSpec(subitem, runtimesConfig)
           if (pkgError) {
             return pkgError
           }
@@ -385,7 +386,7 @@ function validateWebResource(arg: Record<string, any>): string {
 }
 
 // Validator for a PackageSpec
-function validatePackageSpec(arg: Record<string, any>): string {
+function validatePackageSpec(arg: Record<string, any>, runtimesConfig: ParsedRuntimeConfig): string {
   const isDefault = arg.name === 'default'
   for (const item in arg) {
     if (!arg[item]) continue
@@ -398,7 +399,7 @@ function validatePackageSpec(arg: Record<string, any>): string {
         return "actions member of a 'package' must be an array"
       }
       for (const subitem of arg[item]) {
-        const actionError = validateActionSpec(subitem)
+        const actionError = validateActionSpec(subitem, runtimesConfig)
         if (actionError) {
           return actionError
         }
@@ -433,7 +434,7 @@ function validatePackageSpec(arg: Record<string, any>): string {
 }
 
 // Validator for ActionSpec
-function validateActionSpec(arg: Record<string, any>): string {
+function validateActionSpec(arg: Record<string, any>, runtimesConfig: ParsedRuntimeConfig): string {
   for (const item in arg) {
     if (!arg[item]) continue
     switch (item) {
@@ -445,7 +446,7 @@ function validateActionSpec(arg: Record<string, any>): string {
         if (!(typeof arg[item] === 'string')) {
           return `'${item}' member of an 'action' must be a string`
         }
-        if (item === 'runtime' && !validateRuntime(arg[item])) {
+        if (item === 'runtime' && !runtimesConfig.valid.has(arg[item])) {
           return `'${arg[item]}' is not a valid runtime value`
         }
         break
@@ -631,7 +632,7 @@ export function getTargetNamespace(client: Client): Promise<string> {
 }
 
 // Process an action file name, producing 'name', 'binary', 'zipped' and 'runtime' parts
-export function actionFileToParts(fileName: string): { name: string, binary: boolean, zipped: boolean, runtime: string } {
+export function actionFileToParts(fileName: string, runtimes: ParsedRuntimeConfig): { name: string, binary: boolean, zipped: boolean, runtime: string } {
   let runtime: string
   let binary: boolean
   let zipped: boolean
@@ -648,8 +649,8 @@ export function actionFileToParts(fileName: string): { name: string, binary: boo
     } else {
       name = parts.slice(0, -1).join('.')
     }
-    runtime = mid ? runtimeFromZipMid(mid) : runtimeFromExt(ext)
-    binary = binaryFromExt(ext)
+    runtime = mid ? runtimeForZipMid(runtimes.valid, mid) : runtimeForFileExtension(ext)
+    binary = isBinaryFileExtension(ext)
     zipped = ext === 'zip'
   } else {
     // No extension.  Assume binary, with unknown runtime
@@ -680,114 +681,6 @@ function getNameAndMid(parts: string[]): string[] {
     const name = parts.slice(0, -1).join('.')
     return [name, last]
   }
-}
-
-// The following tables are populated (once) by reading a copy of runtimes.json
-
-// Table of extensions, providing the unqualified runtime 'kind' for each extension
-type ExtensionToRuntime = { [key: string]: string }
-const extTable: ExtensionToRuntime = {}
-
-// Table of extensions, saying whether the extension implies binary or not
-type ExtensionToBinary = { [key: string]: boolean }
-const extBinaryTable: ExtensionToBinary = {
-  zip: true
-}
-
-// A map from actual runtime names, full colon-separated syntax, to lists of possible extensions
-type RuntimeToExtensions = { [key: string]: string[] }
-const validRuntimes: RuntimeToExtensions = {}
-
-// A map from unqualified runtime name to the default kind for that runtime name
-const defaultTable: Record<string, string> = {}
-
-// Provide information from runtimes.json, reading it at most once
-let runtimesRead = false
-type ExtensionDetail = { binary: boolean }
-type ExtensionEntry = { [key: string]: ExtensionDetail }
-export type RuntimeEntry = { kind: string, default: boolean, extensions: ExtensionEntry }
-export type RuntimeTable = { [key: string]: RuntimeEntry[] }
-function initRuntimes() {
-  if (!runtimesRead) {
-    runtimesRead = true
-    const runtimes: RuntimeTable = require('../runtimes.json').runtimes
-    for (const runtime in runtimes) {
-      const runtimeEntries: RuntimeEntry[] = runtimes[runtime]
-      for (const entry of runtimeEntries) {
-        const extensionNames = Object.keys(entry.extensions)
-        validRuntimes[entry.kind] = extensionNames
-        if (entry.default) {
-          // TODO we do not yet support per-kind extensions but assume that the extension of a default kind applies to the entire
-          // runtime class
-          validRuntimes[runtime + ':default'] = extensionNames
-          defaultTable[runtime] = entry.kind
-          for (const ext of extensionNames) {
-            extTable[ext] = runtime
-            extBinaryTable[ext] = entry.extensions[ext].binary
-          }
-        }
-      }
-    }
-  }
-}
-
-// Compute the runtime from the file extension.
-function runtimeFromExt(ext: string): string {
-  initRuntimes()
-  if (extTable[ext]) {
-    return extTable[ext] + ':default'
-  }
-  return undefined
-}
-
-// Compute a runtime kind from the 'mid string' of a file name of the form name.runtime.zip
-function runtimeFromZipMid(mid: string): string {
-  if (mid.includes('-')) {
-    return validateRuntime(mid.replace('-', ':'))
-  } else {
-    return validateRuntime(mid + ':default')
-  }
-}
-
-// Compute the file extension from a runtime name.  It is a non-fatal exception for the caller to request a binary extension for
-// a runtime that has only non-binary ones (or vice versa).  However, the runtime name should not depend on user-provided
-// data and should always be valid.
-export function extFromRuntime(runtime: string, binary: boolean): string {
-  initRuntimes()
-  if (validRuntimes[runtime]) {
-    const extArray = validRuntimes[runtime]
-    for (const ext of extArray) {
-      const binaryExt = binaryFromExt(ext)
-      if (binaryExt === binary) {
-        return ext
-      }
-    }
-    return undefined
-  }
-  throw new Error(`Invalid runtime ${runtime} encountered`)
-}
-
-// Validate that a colon separated string actually IS a valid runtime.  Returns the string if so and undefined if not.
-function validateRuntime(kind: string): string {
-  initRuntimes()
-  if (kind in validRuntimes) {
-    return kind
-  }
-  return undefined
-}
-
-// Convert a runtime name that might end in :default to a semantically identical name that does not
-export function canonicalRuntime(runtime: string): string {
-  if (runtime.endsWith(':default')) {
-    runtime = runtime.split(':')[0]
-    return defaultTable[runtime]
-  }
-  return runtime
-}
-
-// Determine whether a given extension implies binary data
-function binaryFromExt(ext: string): boolean {
-  return !!extBinaryTable[ext] // turn undefined into false
 }
 
 // Filters temp files from an array of Dirent structures

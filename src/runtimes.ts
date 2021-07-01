@@ -4,6 +4,8 @@ import {getCredentials, authPersister} from './credentials'
 
 export const API_ENDPOINT = '/api/v1'
 
+const RuntimesCache: Record<string, ParsedRuntimeConfig> = {}
+
 // Custom types for runtimes.json configuration parameters
 type RuntimeLabel = string
 type RuntimeKind = string
@@ -144,4 +146,19 @@ export async function load(apihost: string): Promise<ParsedRuntimeConfig> {
   const valid = parseValidRuntimes(result)
   const d = parseDefaultRuntimes(result)
   return { valid, default: d }
+}
+
+// Initialise runtimes configuration from platform host for current namespace.
+// The parsed runtime configuration will be stored in a local cache.
+// API host parameter is used as the cache key.
+// The cached values will be returned after the first call.
+export async function init(): Promise<ParsedRuntimeConfig> {
+  const creds = await getCredentials(authPersister)
+  const apihost = creds.ow.apihost
+  if (!apihost) throw new Error('Missing APIHOST parameter from current credentials')
+  if (!RuntimesCache[apihost]) {
+    RuntimesCache[apihost] = await load(apihost)
+  }
+
+  return RuntimesCache[apihost]
 }
