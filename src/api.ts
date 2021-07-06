@@ -26,7 +26,7 @@ import openwhisk = require('openwhisk')
 import { getCredentialsForNamespace, getCredentials, Persister, recordNamespaceOwnership } from './credentials'
 import { makeIncluder } from './includer'
 import makeDebug from 'debug'
-import {ParsedRuntimeConfig} from './runtimes'
+import { RuntimesConfig } from './runtimes'
 const debug = makeDebug('nim:deployer:api')
 
 // Initialize the API by 1. purging existing __OW_ entries from the environment, 2.  setting __OW_USER_AGENT, 3. returning a map of
@@ -61,7 +61,7 @@ export function getUserAgent(): string {
 
 // Deploy a disk-resident project given its path and options to pass to openwhisk.  The options are merged
 // with those in the config; the result must include api or apihost, and must include api_key.
-export async function deployProject(path: string, owOptions: OWOptions, credentials: Credentials|undefined, persister: Persister, flags: Flags, runtimes: ParsedRuntimeConfig): Promise<DeployResponse> {
+export async function deployProject(path: string, owOptions: OWOptions, credentials: Credentials|undefined, persister: Persister, flags: Flags, runtimes: RuntimesConfig): Promise<DeployResponse> {
   debug('deployProject invoked with incremental %s', flags.incremental)
   return readPrepareAndBuild(path, owOptions, credentials, persister, flags, runtimes).then(spec => {
     if (spec.error) {
@@ -74,14 +74,14 @@ export async function deployProject(path: string, owOptions: OWOptions, credenti
 
 // Combines the read, prepare, and build phases but does not deploy
 export function readPrepareAndBuild(path: string, owOptions: OWOptions, credentials: Credentials, persister: Persister,
-  flags: Flags, runtimes: ParsedRuntimeConfig, userAgent?: string, feedback?: Feedback): Promise<DeployStructure> {
+  flags: Flags, runtimes: RuntimesConfig, userAgent?: string, feedback?: Feedback): Promise<DeployStructure> {
   return readAndPrepare(path, owOptions, credentials, persister, flags, runtimes, undefined, feedback).then(spec => spec.error ? spec
     : buildProject(spec, runtimes))
 }
 
 // Combines the read and prepare phases but does not build or deploy
 export function readAndPrepare(path: string, owOptions: OWOptions, credentials: Credentials, persister: Persister,
-  flags: Flags, runtimes: ParsedRuntimeConfig, userAgent?: string, feedback?: Feedback): Promise<DeployStructure> {
+  flags: Flags, runtimes: RuntimesConfig, userAgent?: string, feedback?: Feedback): Promise<DeployStructure> {
   const includer = makeIncluder(flags.include, flags.exclude)
   return readProject(path, flags.env, includer, flags.remoteBuild, feedback, runtimes).then(spec => spec.error ? spec
     : prepareToDeploy(spec, owOptions, credentials, persister, flags))
@@ -106,7 +106,7 @@ export function deploy(todeploy: DeployStructure): Promise<DeployResponse> {
 
 // Read the information contained in the project, initializing the DeployStructure
 export async function readProject(projectPath: string, envPath: string, includer: Includer, requestRemote: boolean,
-  feedback: Feedback = new DefaultFeedback(), runtimes: ParsedRuntimeConfig): Promise<DeployStructure> {
+  feedback: Feedback = new DefaultFeedback(), runtimes: RuntimesConfig): Promise<DeployStructure> {
   debug('Starting readProject, projectPath=%s, envPath=%s', projectPath, envPath)
   let ans: DeployStructure
   try {
@@ -141,7 +141,7 @@ export async function readProject(projectPath: string, envPath: string, includer
 }
 
 // 'Build' the project by running the "finder builder" steps in each action-as-directory and in the web directory
-export async function buildProject(project: DeployStructure, runtimes: ParsedRuntimeConfig): Promise<DeployStructure> {
+export async function buildProject(project: DeployStructure, runtimes: RuntimesConfig): Promise<DeployStructure> {
   debug('Starting buildProject with spec %O', project)
   let webPromise: Promise<WebResource[]|Error>
   project.sharedBuilds = { }

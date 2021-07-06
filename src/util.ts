@@ -31,7 +31,7 @@ import makeDebug from 'debug'
 import anymatch from 'anymatch'
 import { parseGithubRef } from './github'
 import { nimbellaDir } from './credentials'
-import {ParsedRuntimeConfig, isBinaryFileExtension, runtimeForZipMid, runtimeForFileExtension} from './runtimes'
+import { isBinaryFileExtension, runtimeForZipMid, runtimeForFileExtension, RuntimesConfig, isValidRuntime} from './runtimes'
 const debug = makeDebug('nim:deployer:util')
 
 // List of files/paths to be ignored, add https://github.com/micromatch/anymatch compatible definitions
@@ -56,7 +56,7 @@ export function setInBrowserFlag(value: boolean): void {
 
 // Read the project config file, with validation
 export async function loadProjectConfig(configFile: string, envPath: string, filePath: string, reader: ProjectReader,
-  feedback: Feedback, runtimesConfig: ParsedRuntimeConfig): Promise<DeployStructure> {
+  feedback: Feedback, runtimesConfig: RuntimesConfig): Promise<DeployStructure> {
   return reader.readFileContents(configFile).then(async data => {
     try {
       const content = substituteFromEnvAndFiles(String(data), envPath, filePath, feedback)
@@ -111,7 +111,7 @@ function locateBuild(buildField: string, remoteRequested: boolean, remoteRequire
 }
 
 // Set up the build fields for a project and detect conflicts.  Determine if local building is required.
-export async function checkBuildingRequirements(todeploy: DeployStructure, requestRemote: boolean, runtimes: ParsedRuntimeConfig): Promise<boolean> {
+export async function checkBuildingRequirements(todeploy: DeployStructure, requestRemote: boolean, runtimes: RuntimesConfig): Promise<boolean> {
   const checkConflicts = (buildField: string, remote: boolean, local: boolean, tag: string) => {
     if (remote && local) {
       throw new Error(`Local and remote building cannot both be required (${tag})`)
@@ -160,7 +160,7 @@ export async function checkBuildingRequirements(todeploy: DeployStructure, reque
 // Determine if an action has a default remote build.  This depends on the action's 'kind': currently, swift and go have a
 // default remote build while other languages do not.   This function is designed to be called before the runtime is otherwise
 // known so it is prepared to peek into the project to figure out the operative runtime.
-async function hasDefaultRemote(action: ActionSpec, reader: ProjectReader, runtimes: ParsedRuntimeConfig): Promise<boolean> {
+async function hasDefaultRemote(action: ActionSpec, reader: ProjectReader, runtimes: RuntimesConfig): Promise<boolean> {
   let runtime = action.runtime
   if (!runtime) {
     const pathKind = await reader.getPathKind(action.file)
@@ -186,7 +186,7 @@ async function hasDefaultRemote(action: ActionSpec, reader: ProjectReader, runti
 
 // Check whether a list of names that are candidates for zipping can agree on a runtime.  This is called only when the
 // config doesn't already provide a runtime or on the raw material in the case of remote builds.
-export function agreeOnRuntime(items: string[], runtimes: ParsedRuntimeConfig): string {
+export function agreeOnRuntime(items: string[], runtimes: RuntimesConfig): string {
   let agreedRuntime: string
   items.forEach(item => {
     const { runtime } = actionFileToParts(item, runtimes)
@@ -246,7 +246,7 @@ function removeEmptyStringMembersFromPackages(packages: PackageSpec[]) {
 
 // Validation for DeployStructure read from disk.  Note: this may be any valid DeployStructure except that the strays member
 // is not expected in this context.  TODO return a list of errors not just the first error.
-export function validateDeployConfig(arg: any, runtimesConfig: ParsedRuntimeConfig): string {
+export function validateDeployConfig(arg: any, runtimesConfig: RuntimesConfig): string {
   let haveActionWrap = false; let haveBucket = false
   const slice = !!arg.slice
   for (const item in arg) {
@@ -386,7 +386,7 @@ function validateWebResource(arg: Record<string, any>): string {
 }
 
 // Validator for a PackageSpec
-function validatePackageSpec(arg: Record<string, any>, runtimesConfig: ParsedRuntimeConfig): string {
+function validatePackageSpec(arg: Record<string, any>, runtimesConfig: RuntimesConfig): string {
   const isDefault = arg.name === 'default'
   for (const item in arg) {
     if (!arg[item]) continue
@@ -434,7 +434,7 @@ function validatePackageSpec(arg: Record<string, any>, runtimesConfig: ParsedRun
 }
 
 // Validator for ActionSpec
-function validateActionSpec(arg: Record<string, any>, runtimesConfig: ParsedRuntimeConfig): string {
+function validateActionSpec(arg: Record<string, any>, runtimesConfig: RuntimesConfig): string {
   for (const item in arg) {
     if (!arg[item]) continue
     switch (item) {
@@ -446,7 +446,7 @@ function validateActionSpec(arg: Record<string, any>, runtimesConfig: ParsedRunt
         if (!(typeof arg[item] === 'string')) {
           return `'${item}' member of an 'action' must be a string`
         }
-        if (item === 'runtime' && !runtimesConfig.valid.has(arg[item])) {
+        if (item === 'runtime' && !isValidRuntime(runtimesConfig, arg[item])) {
           return `'${arg[item]}' is not a valid runtime value`
         }
         break
@@ -632,7 +632,7 @@ export function getTargetNamespace(client: Client): Promise<string> {
 }
 
 // Process an action file name, producing 'name', 'binary', 'zipped' and 'runtime' parts
-export function actionFileToParts(fileName: string, runtimes: ParsedRuntimeConfig): { name: string, binary: boolean, zipped: boolean, runtime: string } {
+export function actionFileToParts(fileName: string, runtimes: RuntimesConfig): { name: string, binary: boolean, zipped: boolean, runtime: string } {
   let runtime: string
   let binary: boolean
   let zipped: boolean
@@ -649,7 +649,7 @@ export function actionFileToParts(fileName: string, runtimes: ParsedRuntimeConfi
     } else {
       name = parts.slice(0, -1).join('.')
     }
-    runtime = mid ? runtimeForZipMid(runtimes.valid, mid) : runtimeForFileExtension(ext)
+    runtime = mid ? runtimeForZipMid(runtimes, mid) : runtimeForFileExtension(ext)
     binary = isBinaryFileExtension(ext)
     zipped = ext === 'zip'
   } else {

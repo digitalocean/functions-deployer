@@ -1,4 +1,4 @@
-import { fromPlatform, parseValidRuntimes, API_ENDPOINT, RuntimesConfig, runtimeForFileExtension, isBinaryFileExtension, fileExtensionForRuntime, runtimeForZipMid, canonicalRuntime, parseDefaultRuntimes } from '../../src/runtimes'
+import { fromPlatform, API_ENDPOINT, RuntimesConfig, runtimeForFileExtension, isBinaryFileExtension, fileExtensionForRuntime, runtimeForZipMid, canonicalRuntime, isValidRuntime, defaultRuntime } from '../../src/runtimes'
 import axios from 'axios'
 import { mocked } from 'ts-jest/utils'
 
@@ -37,7 +37,7 @@ describe('test retrieving runtimes configuration from platform', () => {
     const mockedAxios = mocked(axios, true)
     mockedAxios.get.mockImplementation(httpClient)
 
-    await expect(fromPlatform(mockedAxios, platformUrl)).resolves.toEqual(data)
+    await expect(fromPlatform(mockedAxios, platformUrl)).resolves.toEqual(data.runtimes)
   })
 
   test('should throw errors from HTTP responses > 2XX', async () => {
@@ -120,70 +120,50 @@ describe('test retrieving runtimes configuration from platform', () => {
   })
 })
 
-describe('test parsing valid runtimes', () => {
-  test('should return set of runtime names from platform runtimes JSON', () => {
+describe('test checking valid runtimes', () => {
+  test('should find valid runtimes with explicit version', () => {
     const runtimes: RuntimesConfig = {
-      nodejs: [
-        { "kind": "nodejs:10" },
-        { "kind": "nodejs:14" },
-      ],
-      python: [
-        { "kind": "python:2" },
-        { "kind": "python:3" },
-      ],
-      java: [
-        { "kind": "java:8" }
-      ]
+      nodejs: [ { "kind": "nodejs:10" } ]
     }
-
-    const valid_runtimes = parseValidRuntimes(runtimes)
-    expect(valid_runtimes).toEqual(new Set([].concat(...Object.values(runtimes)).map(r => r.kind)))
+    expect(isValidRuntime(runtimes, 'nodejs:10')).toEqual(true)
   })
 
-  test('should include default values in set extracted from platform runtimes JSON', () => {
+  test('should find valid runtimes with default version', () => {
     const runtimes: RuntimesConfig = {
-      nodejs: [
-        { "kind": "nodejs:10" },
-        { "kind": "nodejs:14", default: true },
-      ],
-      python: [
-        { "kind": "python:2" },
-        { "kind": "python:3", default: true },
-      ],
-      java: [
-        { "kind": "java:8" }
-      ]
+      nodejs: [ { "kind": "nodejs:10", default: true } ]
     }
+    expect(isValidRuntime(runtimes, 'nodejs:default')).toEqual(true)
+  })
 
-    const valid_runtimes = parseValidRuntimes(runtimes)
-    const all_kinds = [].concat(...Object.values(runtimes))
-    const normal_runtimes = all_kinds.map(r => r.kind)
-    const default_runtimes = all_kinds.filter(k => k.default).map(k => `${k.kind.split(':')[0]}:default`)
-    expect(valid_runtimes).toEqual(new Set([...normal_runtimes, ...default_runtimes]))
+  test('should find non-valid runtimes with missing default version', () => {
+    const runtimes: RuntimesConfig = {
+      nodejs: [ { "kind": "nodejs:10" } ]
+    }
+    expect(isValidRuntime(runtimes, 'nodejs:default')).toEqual(false)
+  })
+
+  test('should find non-valid runtimes with explicit version', () => {
+    const runtimes: RuntimesConfig = {
+      nodejs: [ { "kind": "nodejs:10" } ]
+    }
+    expect(isValidRuntime(runtimes, 'nodejs:14')).toEqual(false)
+    expect(isValidRuntime(runtimes, 'python:3')).toEqual(false)
   })
 })
 
-describe('test parsing default runtimes lookup', () => {
-  test('should create map of runtimes from default kinds in runtime configuration', () => {
-    const config: RuntimesConfig = {
-      nodejs: [
-        { "kind": "nodejs:10" },
-        { "kind": "nodejs:14", default: true },
-      ],
-      python: [
-        { "kind": "python:2" },
-        { "kind": "python:3", default: true },
-      ],
-      java: [
-        { "kind": "java:8" }
-      ]
+describe('test finding default runtimes', () => {
+  test('should find valid runtimes with explicit version', () => {
+    const runtimes: RuntimesConfig = {
+      nodejs: [ { "kind": "nodejs:10", default: true } ]
     }
-
-    const defaultRuntimes = parseDefaultRuntimes(config)
-    expect(defaultRuntimes).toEqual({
-      'nodejs': 'nodejs:14', 
-      'python': 'python:3', 
-    })
+    expect(defaultRuntime(runtimes, 'nodejs')).toEqual('nodejs:10')
+  })
+  test('should ignore valid runtimes', () => {
+    const runtimes: RuntimesConfig = {
+      nodejs: [ { "kind": "nodejs:10" } ]
+    }
+    expect(defaultRuntime(runtimes, 'nodejs')).toEqual(undefined)
+    expect(defaultRuntime(runtimes, 'python')).toEqual(undefined)
   })
 })
 
@@ -275,28 +255,39 @@ describe('test determing extension from runtime', () => {
 
 describe('test determing runtime from mid string', () => {
   test('should return undefined for unknown runtimes', () => {
-    const runtimes = new Set<string>()
+    const runtimes = {}
     expect(runtimeForZipMid(runtimes, `runtime`)).toEqual(undefined)
     expect(runtimeForZipMid(runtimes, `runtime-10`)).toEqual(undefined)
   })
   test('should return runtimes for known runtimes', () => {
-    const runtimes = new Set(['runtime:default', 'runtime:10'])
-    expect(runtimeForZipMid(runtimes, `runtime`)).toEqual('runtime:default')
-    expect(runtimeForZipMid(runtimes, `runtime-10`)).toEqual('runtime:10')
+    const runtimes = {
+      nodejs: [{
+        "default": true,
+        "kind": "nodejs:14"
+      }]
+    }
+
+    expect(runtimeForZipMid(runtimes, `nodejs`)).toEqual('nodejs:default')
+    expect(runtimeForZipMid(runtimes, `nodejs-14`)).toEqual('nodejs:14')
   })
 })
 
 describe('test determining canonical runtime', () => {
   test('should return default runtime without explicit version', () => {
-    const defaults = { 'runtime': 'runtime:10' }
-    expect(canonicalRuntime(defaults, 'runtime:default')).toEqual('runtime:10')
+    const runtimes = {
+      nodejs: [{
+        "default": true,
+        "kind": "nodejs:14"
+      }]
+    }
+    expect(canonicalRuntime(runtimes, 'nodejs:default')).toEqual('nodejs:14')
   })
   test('should runtime with explicit version', () => {
-    const defaults = { 'runtime': 'runtime:12' }
-    expect(canonicalRuntime(defaults, 'runtime:10')).toEqual('runtime:10')
+    const runtimes = {}
+    expect(canonicalRuntime(runtimes, 'runtime:10')).toEqual('runtime:10')
   })
   test('should return undefined for non-existing default runtime', () => {
-    const defaults = { }
-    expect(canonicalRuntime(defaults, 'runtime:default')).toEqual(undefined)
+    const runtimes = { }
+    expect(canonicalRuntime(runtimes, 'runtime:default')).toEqual(undefined)
   })
 })

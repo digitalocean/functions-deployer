@@ -2,9 +2,12 @@ import type { AxiosInstance } from 'axios'
 import axios from 'axios';
 import {getCredentials, authPersister} from './credentials'
 
+import debug from 'debug' 
+const debug_log = debug('nim:deployer:runtimes')
+
 export const API_ENDPOINT = '/api/v1'
 
-const RuntimesCache: Record<string, ParsedRuntimeConfig> = {}
+const RuntimesCache: Record<string, RuntimesConfig> = {}
 
 // Custom types for runtimes.json configuration parameters
 type RuntimeLabel = string
@@ -17,12 +20,14 @@ export interface Runtime {
 }
 
 export type RuntimesConfig = Record<RuntimeLabel, Runtime[]> 
-export type DefaultRuntimes = Record<RuntimeLabel, RuntimeKind> 
-export type ValidRuntimes = Set<RuntimeKind> 
+//export type DefaultRuntimes = Record<RuntimeLabel, RuntimeKind> 
+//export type ValidRuntimes = Set<RuntimeKind> 
+  /**
 export type ParsedRuntimeConfig = {
   valid: ValidRuntimes,
   default: DefaultRuntimes
 }
+*/
 
 // List of file extensions for runtimes. This hardcoded list used to be present
 // in the extensions field of the runtimes.json document.
@@ -45,9 +50,11 @@ const BinaryFileExtensions: Set<RuntimeFileExtension> = new Set<RuntimeFileExten
 // Send HTTP request to platform endpoint for runtimes configuration
 export async function fromPlatform(httpClient: AxiosInstance, platformUrl: string): Promise<Record<string, unknown>> {
   const url  = `${platformUrl}${API_ENDPOINT}`
+  debug_log(`loading runtimes from platform @ ${url}`)
   try {
     const { data } = await httpClient.get(url)
-    return data
+    debug_log(`loaded runtimes json: ${JSON.stringify(data)}`)
+    return data?.runtimes
   } catch (err) {
     // Error due to HTTP Code > 2XX
     if (err.response) {
@@ -65,6 +72,7 @@ export async function fromPlatform(httpClient: AxiosInstance, platformUrl: strin
 // Merge inner arrays [[a], [b], [c]] => [a, b, c]
 const flatten = <T> (arr: (T[])[]): T[] => arr.reduce((a, k) => a.concat(k), []) 
 
+/*
 // Return set of valid runtimes from the runtimes configuration.
 // For each runtime image found, return the `kind` property on the image.
 // If the image is the default, return additional default kind value: ${label:default}
@@ -81,7 +89,9 @@ export function parseValidRuntimes(config: RuntimesConfig): Set<RuntimeKind> {
 
   return new Set<RuntimeKind>(kindLabels)
 }
+*/
 
+/*
 // Return a lookup of runtime labels to the default kind image from the runtimes config.
 export function parseDefaultRuntimes(config: RuntimesConfig): DefaultRuntimes {
   const runtimesToDefaults = ([label, images]: [RuntimeLabel, Runtime[]]): DefaultRuntimes => {
@@ -91,6 +101,7 @@ export function parseDefaultRuntimes(config: RuntimesConfig): DefaultRuntimes {
 
   return Object.assign({} as DefaultRuntimes, ...Object.entries(config).map(runtimesToDefaults))
 }
+*/
 
 // Compute the runtime from the file extension.
 export function runtimeForFileExtension(fileExtension: RuntimeFileExtension): RuntimeKind | undefined {
@@ -115,44 +126,54 @@ export function fileExtensionForRuntime(runtime: RuntimeKind, isBinaryExtension:
   return extFromEntry(extRuntimes.find(([_, r]) => isSameRuntime(r)))
 }
 
+// Does the runtime kind exist in the platform config?
+export function isValidRuntime(runtimes: RuntimesConfig, kind: RuntimeKind): boolean {
+  const [label, version] = kind.split(':')
+  const images = runtimes[label] ?? []
+  return images.some(i => version === 'default' ? i.default : i.kind === kind)
+}
+
+// Find the default runtime for a language
+export function defaultRuntime(runtimes: RuntimesConfig, label: RuntimeLabel): RuntimeKind {
+  const kinds = runtimes[label] ?? []
+  const defaultRuntime = kinds.find(k => k.default) ?? { kind: undefined }
+  return defaultRuntime.kind
+}
+
 // Compute a runtime kind from the 'mid string' of a file name of the form name.runtime.zip
-export function runtimeForZipMid(runtimes: Set<RuntimeKind>, mid: string): RuntimeKind {
+export function runtimeForZipMid(runtimes: RuntimesConfig, mid: string): RuntimeKind {
   const runtime = mid.includes('-') ? mid.replace('-', ':') : `${mid}:default`
-  return runtimes.has(runtime) ? runtime : undefined
+  return isValidRuntime(runtimes, runtime) ? runtime : undefined
 }
 
 // Return default kind for runtime label - if explicit version isn't used.
-export function canonicalRuntime(defaults: Record<RuntimeLabel, RuntimeKind>, runtime: RuntimeKind) {
+export function canonicalRuntime(runtimes: RuntimesConfig, runtime: RuntimeKind) {
   if (runtime.endsWith(':default')) {
     const [label] = runtime.split(':')
-    return defaults[label]
+    return defaultRuntime(runtimes, label)
   }
   return runtime
 }
 
 // Custom type guard to ensure JSON response is in the correct format
 function isValidRuntimesJson(src: Record<string, unknown>): src is RuntimesConfig {
-  return Object.values(src).every(v => {
-    Array.isArray(v) && v.every(k => k.hasOwnProperty('kind'))
-  })
+  return Object.values(src).every(v => Array.isArray(v) && v.every(k => k.hasOwnProperty('kind')))
 }
 
 // Load runtimes JSON configuration file from platform endpoint
-export async function load(apihost: string): Promise<ParsedRuntimeConfig> {
-  const result = await fromPlatform(axios, apihost)
-  if (!isValidRuntimesJson(result)) {
+export async function load(apihost: string): Promise<RuntimesConfig> {
+  const runtimes = await fromPlatform(axios, apihost)
+  if (!isValidRuntimesJson(runtimes)) {
     throw new Error(`Invalid runtime JSON received from platform API: ${apihost}`)
   }
-  const valid = parseValidRuntimes(result)
-  const d = parseDefaultRuntimes(result)
-  return { valid, default: d }
+  return runtimes
 }
 
 // Initialise runtimes configuration from platform host for current namespace.
 // The parsed runtime configuration will be stored in a local cache.
 // API host parameter is used as the cache key.
 // The cached values will be returned after the first call.
-export async function init(): Promise<ParsedRuntimeConfig> {
+export async function init(): Promise<RuntimesConfig> {
   const creds = await getCredentials(authPersister)
   const apihost = creds.ow.apihost
   if (!apihost) throw new Error('Missing APIHOST parameter from current credentials')
