@@ -123,16 +123,22 @@ describe('test retrieving runtimes configuration from platform', () => {
 describe('test checking valid runtimes', () => {
   test('should find valid runtimes with explicit version', () => {
     const runtimes: RuntimesConfig = {
-      nodejs: [ { "kind": "nodejs:10" } ]
+      nodejs: [ 
+        { "kind": "nodejs:10" },
+        { "kind": "cloudjs:10" }
+      ]
     }
     expect(isValidRuntime(runtimes, 'nodejs:10')).toEqual(true)
+    expect(isValidRuntime(runtimes, 'cloudjs:10')).toEqual(true)
   })
 
   test('should find valid runtimes with default version', () => {
     const runtimes: RuntimesConfig = {
-      nodejs: [ { "kind": "nodejs:10", default: true } ]
+      nodejs: [ { "kind": "nodejs:10", default: true } ],
+      python: [ { "kind": "python-ai:10", default: true } ]
     }
     expect(isValidRuntime(runtimes, 'nodejs:default')).toEqual(true)
+    expect(isValidRuntime(runtimes, 'python:default')).toEqual(true)
   })
 
   test('should find non-valid runtimes with missing default version', () => {
