@@ -1,8 +1,7 @@
-import type { AxiosInstance } from 'axios'
-import axios from 'axios';
-import {getCredentials, authPersister} from './credentials'
+import axios, { AxiosInstance } from 'axios'
+import { getCredentials, authPersister } from './credentials'
 
-import debug from 'debug' 
+import debug from 'debug'
 const debug_log = debug('nim:deployer:runtimes')
 
 export const API_ENDPOINT = '/api/v1'
@@ -15,11 +14,11 @@ type RuntimeKind = string
 type RuntimeFileExtension = string
 
 export interface Runtime {
-  kind: RuntimeKind 
+  kind: RuntimeKind
   default?: boolean
 }
 
-export type RuntimesConfig = Record<RuntimeLabel, Runtime[]> 
+export type RuntimesConfig = Record<RuntimeLabel, Runtime[]>
 
 // List of file extensions for runtimes. This hardcoded list used to be present
 // in the extensions field of the runtimes.json document.
@@ -41,7 +40,7 @@ const BinaryFileExtensions: Set<RuntimeFileExtension> = new Set<RuntimeFileExten
 
 // Send HTTP request to platform endpoint for runtimes configuration
 export async function fromPlatform(httpClient: AxiosInstance, platformUrl: string): Promise<Record<string, unknown>> {
-  const url  = `${platformUrl}${API_ENDPOINT}`
+  const url = `${platformUrl}${API_ENDPOINT}`
   debug_log(`loading runtimes from platform @ ${url}`)
   try {
     const { data } = await httpClient.get(url)
@@ -51,10 +50,10 @@ export async function fromPlatform(httpClient: AxiosInstance, platformUrl: strin
     // Error due to HTTP Code > 2XX
     if (err.response) {
       throw new Error(`http request failed (${url}) with status (${err.response.status}): ${err.response.statusText} `)
-    // or response never received
+      // or response never received
     } else if (err.request) {
       throw new Error(`http request failed: GET ${url}`)
-    // or something else...
+      // or something else...
     } else {
       throw err
     }
@@ -130,7 +129,7 @@ export async function load(apihost: string): Promise<RuntimesConfig> {
   return runtimes
 }
 
-// Initialise runtimes configuration from platform host for current namespace.
+// Initialize runtimes configuration from platform host for current namespace.
 // The parsed runtime configuration will be stored in a local cache.
 // API host parameter is used as the cache key.
 // The cached values will be returned after the first call.
