@@ -59,7 +59,6 @@
     "/LICENSE",
     "/package.json",
     "/version.json",
-    "/runtimes.json",
     "/sensitiveNamespaces.json",
     "/productionProjects.json",
     "/404.html"
