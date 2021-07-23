@@ -22,17 +22,18 @@ export type RuntimesConfig = Record<RuntimeLabel, Runtime[]>
 
 // List of file extensions for runtimes. This hardcoded list used to be present
 // in the extensions field of the runtimes.json document.
-const FileExtensionRuntimes: Record<RuntimeFileExtension, RuntimeKind> = {
-  'rs': 'rust',
-  'js': 'nodejs',
-  'py': 'python',
-  'ts': 'typescript',
-  'java': 'java',
-  'jar': 'java',
-  'go': 'go',
-  'swift': 'swift',
-  'php': 'php',
-  'rb': 'ruby',
+const FileExtensionRuntimes: Record<RuntimeKind, RuntimeFileExtension[]> = {
+  'go': ['go'],
+  'java': ['java', 'jar'],
+  'nodejs': ['js'],
+  'typescript': ['ts'],
+  'php': ['php'],
+  'python': ['py'],
+  'ruby': ['rb'],
+  'rust': ['rs'],
+  'swift': ['swift'],
+  'deno': ['ts', 'js'],
+  'dotnet': ['cs', 'vb']
 }
 
 // File extensions which imply binary data
@@ -62,8 +63,8 @@ export async function fromPlatform(httpClient: AxiosInstance, platformUrl: strin
 
 // Compute the runtime from the file extension.
 export function runtimeForFileExtension(fileExtension: RuntimeFileExtension): RuntimeKind | undefined {
-  const runtime = FileExtensionRuntimes[fileExtension]
-  return runtime ? `${runtime}:default` : runtime
+  const runtime = Object.entries(FileExtensionRuntimes).find((item, i) => item[1].includes(fileExtension))
+  return (runtime && runtime.length > 0) ? `${runtime[0]}:default` : undefined
 }
 
 // Does file extension imply binary data?
@@ -75,13 +76,11 @@ export function isBinaryFileExtension(fileExtension: RuntimeFileExtension): bool
 // Runtime returned should match the option for whether file extension refers to binary data
 export function fileExtensionForRuntime(runtime: RuntimeKind, isBinaryExtension: boolean): RuntimeFileExtension {
   debug_log(`fileExtensionForRuntime: runtime (${runtime}) binary (${isBinaryExtension})`)
-  const isSameRuntime = (r: string): boolean => runtime.startsWith(r)
-  const isValidRuntime = Object.values(FileExtensionRuntimes).some(isSameRuntime)
+  const isSameRuntime = (r: string): boolean => r.includes(runtime)
+  const isValidRuntime = Object.keys(FileExtensionRuntimes).some(isSameRuntime)
   if (!isValidRuntime) throw new Error(`Invalid runtime ${runtime} encountered`)
 
-  const extFromEntry = <T>(entry?: T[]): T | undefined => Array.isArray(entry) ? entry[0] : entry
-  const extRuntimes = Object.entries(FileExtensionRuntimes).filter(([ext]: string[]) => BinaryFileExtensions.has(ext) === isBinaryExtension)
-  return extFromEntry(extRuntimes.find(([_, r]) => isSameRuntime(r)))
+  return isBinaryExtension ? FileExtensionRuntimes[runtime].filter((item) => BinaryFileExtensions.has(item))[0] : FileExtensionRuntimes[runtime][0]
 }
 
 // Does the runtime kind exist in the platform config?

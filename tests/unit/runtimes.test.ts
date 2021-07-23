@@ -123,7 +123,7 @@ describe('test retrieving runtimes configuration from platform', () => {
 describe('test checking valid runtimes', () => {
   test('should find valid runtimes with explicit version', () => {
     const runtimes: RuntimesConfig = {
-      nodejs: [ 
+      nodejs: [
         { "kind": "nodejs:10" },
         { "kind": "cloudjs:10" }
       ]
@@ -134,8 +134,8 @@ describe('test checking valid runtimes', () => {
 
   test('should find valid runtimes with default version', () => {
     const runtimes: RuntimesConfig = {
-      nodejs: [ { "kind": "nodejs:10", default: true } ],
-      python: [ { "kind": "python-ai:10", default: true } ]
+      nodejs: [{ "kind": "nodejs:10", default: true }],
+      python: [{ "kind": "python-ai:10", default: true }]
     }
     expect(isValidRuntime(runtimes, 'nodejs:default')).toEqual(true)
     expect(isValidRuntime(runtimes, 'python:default')).toEqual(true)
@@ -143,14 +143,14 @@ describe('test checking valid runtimes', () => {
 
   test('should find non-valid runtimes with missing default version', () => {
     const runtimes: RuntimesConfig = {
-      nodejs: [ { "kind": "nodejs:10" } ]
+      nodejs: [{ "kind": "nodejs:10" }]
     }
     expect(isValidRuntime(runtimes, 'nodejs:default')).toEqual(false)
   })
 
   test('should find non-valid runtimes with explicit version', () => {
     const runtimes: RuntimesConfig = {
-      nodejs: [ { "kind": "nodejs:10" } ]
+      nodejs: [{ "kind": "nodejs:10" }]
     }
     expect(isValidRuntime(runtimes, 'nodejs:14')).toEqual(false)
     expect(isValidRuntime(runtimes, 'python:3')).toEqual(false)
@@ -160,13 +160,13 @@ describe('test checking valid runtimes', () => {
 describe('test finding default runtimes', () => {
   test('should find valid runtimes with explicit version', () => {
     const runtimes: RuntimesConfig = {
-      nodejs: [ { "kind": "nodejs:10", default: true } ]
+      nodejs: [{ "kind": "nodejs:10", default: true }]
     }
     expect(defaultRuntime(runtimes, 'nodejs')).toEqual('nodejs:10')
   })
   test('should ignore valid runtimes', () => {
     const runtimes: RuntimesConfig = {
-      nodejs: [ { "kind": "nodejs:10" } ]
+      nodejs: [{ "kind": "nodejs:10" }]
     }
     expect(defaultRuntime(runtimes, 'nodejs')).toEqual(undefined)
     expect(defaultRuntime(runtimes, 'python')).toEqual(undefined)
@@ -200,7 +200,7 @@ describe('test determing runtime for an extension', () => {
 
 describe('test does file extension imply binary data', () => {
   test('should return true for binary file extensions', () => {
-    const binary_extensions = [ 'jar', 'zip' ]
+    const binary_extensions = ['jar', 'zip']
 
     for (let ext of binary_extensions) {
       expect(isBinaryFileExtension(ext)).toEqual(true)
@@ -218,33 +218,33 @@ describe('test does file extension imply binary data', () => {
   })
 })
 
-describe('test determing extension from runtime', () => {
+describe('test determining extension from runtime', () => {
   test('should return extensions for known non-binary runtimes (version & default)', () => {
     const known_runtimes = {
-      'rust': 'rs',
-      'nodejs': 'js',
-      'python': 'py',
-      'typescript': 'ts',
-      'java': 'java',
-      'go': 'go',
-      'swift': 'swift',
-      'php': 'php',
-      'ruby': 'rb'
+      'go': ['go'],
+      'java': ['java', 'jar'],
+      'nodejs': ['js'],
+      'typescript': ['ts'],
+      'php': ['php'],
+      'python': ['py'],
+      'ruby': ['rb'],
+      'rust': ['rs'],
+      'swift': ['swift'],
+      'deno': ['ts', 'js'],
+      'dotnet': ['cs', 'vb']
     }
     for (let [runtime, extension] of Object.entries(known_runtimes)) {
-      expect(fileExtensionForRuntime(`${runtime}:10`, false)).toEqual(extension)
-      expect(fileExtensionForRuntime(`${runtime}:default`, false)).toEqual(extension)
+      expect(fileExtensionForRuntime(runtime, false)).toEqual(extension[0])
     }
-  }) 
+  })
   test('should return extensions for known binary runtimes (version & default)', () => {
     const known_runtimes = {
-      'java': 'jar'
+      'java': ['java', 'jar']
     }
     for (let [runtime, extension] of Object.entries(known_runtimes)) {
-      expect(fileExtensionForRuntime(`${runtime}:10`, true)).toEqual(extension)
-      expect(fileExtensionForRuntime(`${runtime}:default`, true)).toEqual(extension)
+      expect(fileExtensionForRuntime(runtime, true)).toEqual(extension[1])
     }
-  }) 
+  })
 
   test('should return undefined for unknown runtimes', () => {
     expect(() => fileExtensionForRuntime('unknown:10', false)).toThrow(`Invalid runtime unknown:10 encountered`)
@@ -255,11 +255,11 @@ describe('test determing extension from runtime', () => {
     expect(() => fileExtensionForRuntime('unknown:default', true)).toThrow(`Invalid runtime unknown:default encountered`)
   })
   test('should return undefined for incorrect binary runtimes', () => {
-    expect(fileExtensionForRuntime(`nodejs:default`, true)).toEqual(undefined)
+    expect(fileExtensionForRuntime(`nodejs`, true)).toEqual(undefined)
   })
-}) 
+})
 
-describe('test determing runtime from mid string', () => {
+describe('test determining runtime from mid string', () => {
   test('should return undefined for unknown runtimes', () => {
     const runtimes = {}
     expect(runtimeForZipMid(runtimes, `runtime`)).toEqual(undefined)
@@ -293,7 +293,7 @@ describe('test determining canonical runtime', () => {
     expect(canonicalRuntime(runtimes, 'runtime:10')).toEqual('runtime:10')
   })
   test('should return undefined for non-existing default runtime', () => {
-    const runtimes = { }
+    const runtimes = {}
     expect(canonicalRuntime(runtimes, 'runtime:default')).toEqual(undefined)
   })
 })
