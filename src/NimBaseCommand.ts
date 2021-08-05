@@ -412,5 +412,5 @@ function fixAioCredentials(logger: NimLogger, flags: any) {
     logger.handleError("You do not have a current namespace.  Use 'nim auth login' to create a new one or 'nim auth switch' to use an existing one")
   }
   process.env.AIO_RUNTIME_APIHOST = currentHost
-  process.env.AIO_RUNTIME_AUTH = currentAuth
+  process.env.WHISK_AUTH = process.env.AIO_RUNTIME_AUTH = currentAuth
 }
