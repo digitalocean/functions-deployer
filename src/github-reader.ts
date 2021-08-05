@@ -12,11 +12,15 @@
  */
 
 import { ProjectReader, PathKind } from './deploy-struct'
-import { GithubDef, makeClient, readContents, seemsToBeProject, OctokitNonArrayResponse } from './github'
-import * as Octokit from '@octokit/rest'
+import { GithubDef, makeClient, readContents, seemsToBeProject } from './github'
+import { Octokit } from '@octokit/rest'
+import { components } from '@octokit/openapi-types'
 import * as PathPkg from 'path'
 import makeDebug from 'debug'
 const debug = makeDebug('nim:deployer:github-reader')
+
+type DirectoryItem = components["schemas"]["content-directory"][number]
+type FileContent = components["schemas"]["content-file"]
 
 // Defines the github version of the ProjectReader
 // In general files passed to a ProjectReader are relative to the project path, which includes the path portion of
@@ -31,7 +35,6 @@ const debug = makeDebug('nim:deployer:github-reader')
 // directory, it will use the OS call even though you specified posix.   But, we don't ever do a resolve here because
 // we are just doing path manipulation.
 const Path = PathPkg.posix || PathPkg
-
 // Make
 export function makeGithubReader(def: GithubDef, userAgent: string): ProjectReader {
   const client = makeClient(def, userAgent)
@@ -42,7 +45,7 @@ export function makeGithubReader(def: GithubDef, userAgent: string): ProjectRead
 class GithubProjectReader implements ProjectReader {
     client: Octokit
     def: GithubDef
-    cache: Map<string, Octokit.ReposGetContentsResponse>
+    cache: Map<string, DirectoryItem[] | FileContent>
 
     constructor(client: Octokit, def: GithubDef) {
       debug('new github-reader for %O', def)
@@ -75,7 +78,7 @@ class GithubProjectReader implements ProjectReader {
     }
 
     // Subroutine used by readdir; may have other uses
-    toPathKind(item: Octokit.ReposGetContentsResponseItem): PathKind {
+    toPathKind(item: DirectoryItem): PathKind {
       let mode = 0o666
       if (item.type === 'file' && (item.name.endsWith('.sh') || item.name.endsWith('.cmd'))) {
         mode = 0o777
@@ -87,13 +90,13 @@ class GithubProjectReader implements ProjectReader {
     async readFileContents(path: string): Promise<Buffer> {
       path = this.fixPathArgument(path)
       debug('reading file %s', path)
-      const contents = await this.retrieve(path) as OctokitNonArrayResponse
+      const contents = await this.retrieve(path) as FileContent
       // Careful with the following: we want to support empty files but the empty string is falsey.
       if (typeof contents.content !== 'string' || !contents.encoding) {
         debug('improper contents: %O', contents)
         throw new Error(`Contents of file at '${path}' was not interpretable`)
       }
-      return Buffer.from(contents.content, contents.encoding)
+      return Buffer.from(contents.content, contents.encoding as BufferEncoding)
     }
 
     // Implement isExistingFile for github
@@ -122,7 +125,7 @@ class GithubProjectReader implements ProjectReader {
     }
 
     // Basic retrieval function with cache.  Cache is dead simple since we never modify anything
-    async retrieve(path: string): Promise<Octokit.ReposGetContentsResponse> {
+   async retrieve(path: string): Promise<DirectoryItem[] | FileContent> {
       const effectivePath = Path.normalize(Path.join(this.def.path, path))
       let contents = this.cache.get(effectivePath)
       if (!contents) {
