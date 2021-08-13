@@ -715,9 +715,19 @@ async function invokeRemoteBuilder(zipped: Buffer, credentials: Credentials, owC
   const runtime = canonicalRuntime(runtimes, kind).replace(':', '_')
   const buildActionName = `${BUILDER_ACTION_STEM}${runtime}`
   debug(`Invoking remote build action '${buildActionName}' for build '${path.basename(remoteName)} of ${activityName}`)
-  const invoked = await owClient.actions.invoke({ name: buildActionName, params: { toBuild: remoteName } })
-  feedback.progress(`Submitted ${activityName} for remote building and deployment in runtime ${kind}`)
-  return invoked.activationId
+  try {
+    const invoked = await owClient.actions.invoke({ name: buildActionName, params: { toBuild: remoteName } })
+    feedback.progress(`Submitted ${activityName} for remote building and deployment in runtime ${kind}`)
+    return invoked.activationId
+  } catch (err) {
+    if (err.statusCode === 404) {
+      throw new Error('Remote build service is not available on this platform instance.')
+    } else if (err.statusCode >= 500 && err.statusCode <= 599) {
+      throw new Error('Remote build service returned error status.')
+    } else {
+      throw err
+    }
+  }
 }
 
 // Read a directory and filter the result
