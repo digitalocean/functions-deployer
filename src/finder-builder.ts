@@ -42,7 +42,8 @@ interface Ignore {
 }
 
 const ZIP_TARGET = '__deployer__.zip'
-const BUILDER_ACTION_STEM = '/nimbella/builder/build_'
+const BUILDER_NAMESPACE = process.env['TEST_BUILDER_NAMESPACE'] || 'nimbella'
+const BUILDER_ACTION_STEM = `/${BUILDER_NAMESPACE}/builder/build_`
 const CANNED_REMOTE_BUILD = `
 #!/bin/bash
 /bin/defaultBuild
