@@ -34,5 +34,4 @@ export { cleanBucket, restore404Page, makeStorageClient } from './deploy-to-buck
 export { wskRequest, inBrowser, delay, writeSliceResult, getBestProjectName, isTextType, renamePackage, setInBrowserFlag, getExclusionList, isExcluded, SYSTEM_EXCLUDE_PATTERNS } from './util'
 export * from './runtimes'
 export { GithubDef, isGithubRef, parseGithubRef, fetchProject } from './github'
-export { NimBaseCommand, NimLogger, parseAPIHost, NimFeedback, disambiguateNamespace, CaptureLogger, setHelpHelper } from './NimBaseCommand'
 export { deleteSlice } from './slice-reader'
