@@ -22,6 +22,8 @@ import { getCredentials, authPersister } from './credentials'
 const debug = makeDebug('nim:deployer:slice-reader')
 const TEMP = process.platform === 'win32' ? process.env.TEMP : '/tmp'
 const BUCKET_BUILDER_PREFIX = '.nimbella/builds'
+const GCS_PROVIDER = '@nimbella/storage-gcs'
+const S3_PROVIDER = '@nimbella/storage-s3'
 
 // Supports the fetching and deletion of project slices from the data bucket and related management functions
 
@@ -112,9 +114,19 @@ async function ensureObjectStoreCredentials() {
   if (!storeCreds) {
     debug('Objectstore credentials were not available, attempting to load from credential store')
     creds = await getCredentials(authPersister) // will throw if no current namespace, that's ok
-    const { credentials, project_id } = creds.storageKey
-    const { client_email, private_key } = credentials
-    process.env.__NIM_STORAGE_KEY = JSON.stringify({ client_email, private_key, project_id })
+    const storage = creds.storageKey
+    const provider = storage.provider || GCS_PROVIDER
+    if (provider === GCS_PROVIDER) {
+      // The local storage form for this provider differs from what needs to be in the environment (historical).
+      const { credentials, project_id } = storage
+      const { client_email, private_key } = credentials
+      process.env.__NIM_STORAGE_KEY = JSON.stringify({ client_email, private_key, project_id })
+    } else if (provider === S3_PROVIDER) {
+      // The S3 provider assumes what's in the environment === what would be stored.
+      process.env.__NIM_STORAGE_KEY = JSON.stringify(storage)
+    } else {
+      debug(`No support for storage provider '%s'`, provider)
+    }
   }
   const namespace = process.env.__OW_NAMESPACE || process.env.savedOW_NAMESPACE
   const apiHost = process.env.__OW_API_HOST || process.env.savedOW_API_HOST
