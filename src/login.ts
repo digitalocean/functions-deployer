@@ -17,6 +17,7 @@ import { Credentials, FullCredentials } from './deploy-struct'
 import { Persister, fileSystemPersister, addCredentialAndSave, addCredential } from './credentials'
 import createDebug from 'debug'
 import { wskRequest } from './util'
+import { atob } from 'atob'
 const debug = createDebug('nimbella.cli')
 
 // Local types
@@ -48,12 +49,17 @@ interface NimUserData {
 
 // Non-exported constants
 const AUTHORIZE_URL_PATH = '/api/v1/web/nimbella/user/authorize.json'
-const DEFAULT_API_HOST = 'https://apigcp.nimbella.io'
 
 // Login with token.  Handles interaction with the Nimbella authorize action via the whisk REST API.
 // Requires a function to store the results so that the same logic can be used by both the deployer and the workbench
 // Optional third parameter provide the API host to use (defaults to the usual customer host)
-export async function doLogin(token: string, persister: Persister, host: string = DEFAULT_API_HOST): Promise<Credentials> {
+export async function doLogin(token: string, persister: Persister, host: string): Promise<Credentials> {
+  if (!host) {
+    host = getHostFromToken(token)
+    if (!host) {
+      throw new Error('The token does not specify an API host.  The apihost must be specified explicitly.')      
+    }
+  }
   const fullURL = host + AUTHORIZE_URL_PATH + '?token=' + token
   const rawResponse = await wskRequest(fullURL)
   if (rawResponse.statusCode >= 400) {
@@ -73,6 +79,14 @@ export async function doLogin(token: string, persister: Persister, host: string 
     return credentials
   }
 }
+
+// Parse the JWT to determine if it contains an API host.  Not all tokens contain one.
+function getHostFromToken(token: string): string {
+  const b64Body = token.split('.')[1]
+  const jsonBody = atob(b64Body)
+  const body = JSON.parse(jsonBody)
+  return body.apihost
+} 
 
 // Login using a JSON structure provided by `nim user set` (the same as the one returned by `nim user get`).
 // This is designed to be run as a subprocess of `nim user set`, which feeds most of the information via
