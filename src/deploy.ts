@@ -110,18 +110,20 @@ async function deployAllWebResources(todeploy: DeployStructure, webLocal: string
 // Process the remote result when something has been built remotely
 async function processRemoteResponse(activationId: string, owClient: openwhisk.Client, context: string, feedback: Feedback): Promise<DeployResponse> {
   let activation: openwhisk.Activation<openwhisk.Dict>
-  const tick = () => feedback.progress(`Processing of '${context}' is still running remotely ...`)
+  const tick = () => feedback.progress(`Processing of ${context} is still running remotely ...`)
   try {
     activation = await waitForActivation(activationId, owClient, tick)
   } catch (err) {
-    return wrapError(err, 'waiting for remote build response for ' + context)
+    return wrapError(err, context + ' (waiting for remote build response)')
   }
   if (!activation.response || !activation.response.success) {
     let err = 'Remote build failed to provide a result'
     if (activation?.response?.result?.error) {
       err = activation.response.result.error
+      const parts = err.split("Error:")
+      err = parts[parts.length - 1]
     }
-    return wrapError(new Error(`Remote error '${err}'`), 'running remote build for ' + context)
+    return wrapError(new Error(err), context + ' (running remote build)')
   }
   const result = activation.response.result as Record<string, any>
   debug('Remote result was %O', result)
@@ -278,7 +280,7 @@ function deployAction(action: ActionSpec, spec: DeployStructure, pkgIsClean: boo
     return Promise.resolve(wrapError(action.buildError, context))
   }
   if (action.buildResult) {
-    return processRemoteResponse(action.buildResult, wsk, action.name, feedback)
+    return processRemoteResponse(action.buildResult, wsk, `'${action.name}'`, feedback)
   }
   if (action.code) {
     debug('action already has code')
