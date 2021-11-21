@@ -51,14 +51,19 @@ interface NimUserData {
 const AUTHORIZE_URL_PATH = '/api/v1/web/nimbella/user/authorize.json'
 
 // Login with token.  Handles interaction with the Nimbella authorize action via the whisk REST API.
-// Requires a function to store the results so that the same logic can be used by both the deployer and the workbench
-// Optional third parameter provide the API host to use (defaults to the usual customer host)
+// Requires a function to store the results so that the same logic can be used by both the deployer and the workbench.
+// Optional third parameter provides the API host to use.  The token may also encode an API host.  At least one
+// source for the API host must be non-falsey.  If both are present, they must match.
 export async function doLogin(token: string, persister: Persister, host: string): Promise<Credentials> {
-  if (!host) {
-    host = getHostFromToken(token)
-    if (!host) {
-      throw new Error('The token does not specify an API host.  The apihost must be specified explicitly.')      
-    }
+  const tokenHost = getHostFromToken(token)
+  if (host && tokenHost && host !== tokenHost) {
+      throw new Error(`The token encodes an API host but not the one you specified.  Omit the API host.`)
+  } else if (!host) {
+      if (tokenHost) {
+        host = tokenHost
+      } else {
+        throw new Error('The token does not specify an API host.  The apihost must be specified explicitly.')
+      }      
   }
   const fullURL = host + AUTHORIZE_URL_PATH + '?token=' + token
   const rawResponse = await wskRequest(fullURL)
