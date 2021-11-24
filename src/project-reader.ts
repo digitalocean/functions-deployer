@@ -354,7 +354,7 @@ function readPackage(pkgPath: string, displayPath: string, pkgName: string, incl
   return reader.readdir(pkgPath).then((items: PathKind[]) => {
     items = filterFiles(items)
     const promises: Promise<ActionSpec>[] = []
-    const seen = {}
+    const seen = new Map<string,string>()
     for (const item of items) {
       const file = path.join(pkgPath, item.name)
       const displayFile = path.join(displayPath, item.name)
@@ -363,20 +363,20 @@ function readPackage(pkgPath: string, displayPath: string, pkgName: string, incl
         // Directly deployable action not requiring a build.
         const { name, runtime, binary, zipped } = actionFileToParts(item.name, runtimes)
         if (!includer.isActionIncluded(pkgName, name)) continue
-        const before = seen[name]
+        const before = seen.get(name)
         if (before) {
           throw duplicateName(name, before, runtime)
         }
-        seen[name] = runtime
+        seen.set(name, runtime)
         promises.push(Promise.resolve({ name, file, displayFile, runtime, binary, zipped, package: pkgName }))
       } else if (item.isDirectory) {
         // Build-dependent action or renamed action
         if (!includer.isActionIncluded(pkgName, item.name)) continue
-        const before = seen[item.name]
+        const before = seen.get(item.name)
         if (before) {
           throw duplicateName(item.name, before, '*')
         }
-        seen[item.name] = '*'
+        seen.set(item.name, '*')
         promises.push(getBuildForAction(file, reader).then(build => {
           return { name: item.name, file, displayFile, build, package: pkgName }
         }))
