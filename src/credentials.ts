@@ -268,7 +268,7 @@ export async function getCurrentNamespace(persister: Persister): Promise<string 
 function saveCredentialStore(store: CredentialStore): void {
   const toWrite = JSON.stringify(store, null, 2)
   debug('writing credential store')
-  fs.writeFileSync(credentialStore(), toWrite)
+  fs.writeFileSync(credentialStore(), toWrite, { mode: 0o600 })
 }
 
 function saveLegacyInfo(apihost: string, auth: string): void {
@@ -328,7 +328,7 @@ function browserSaveLegacyInfo(_apihost: string, _auth: string): void {
 // the parent directory preparatory to the first write.  It does not actually write the credential store.
 function initialCredentialStore(): CredentialStore {
   if (!fs.existsSync(nimbellaDir())) {
-    fs.mkdirSync(nimbellaDir())
+    fs.mkdirSync(nimbellaDir(), { mode: 0o700 })
   }
   return { currentHost: undefined, currentNamespace: undefined, credentials: {} }
 }
@@ -354,7 +354,7 @@ function wouldReplace(store: CredentialStore, apihost: string, namespace: string
 // probably be correlated with the api host)
 function saveWskProps(apihost: string, auth: string) {
   const wskPropsContents = `APIHOST=${apihost}\nAUTH=${auth}\n`
-  fs.writeFileSync(wskProps(), wskPropsContents)
+  fs.writeFileSync(wskProps(), wskPropsContents, { mode: 0o600 })
 }
 
 // Given a namespace and _optionally_ an apihost, return the credentials, throwing errors based on the
