@@ -161,17 +161,9 @@ export async function checkBuildingRequirements(todeploy: DeployStructure, reque
 // default remote build while other languages do not.   This function is designed to be called before the runtime is otherwise
 // known so it is prepared to peek into the project to figure out the operative runtime.
 async function hasDefaultRemote(action: ActionSpec, reader: ProjectReader, runtimes: RuntimesConfig): Promise<boolean> {
-  let runtime = action.runtime
-  if (!runtime) {
-    const pathKind = await reader.getPathKind(action.file)
-    if (pathKind.isFile) {
-      ({ runtime } = actionFileToParts(pathKind.name, runtimes))
-    } else if (pathKind.isDirectory) {
-      const files = await promiseFilesAndFilterFiles(action.file, reader)
-      runtime = agreeOnRuntime(files, runtimes)
-    } else {
-      return false
-    }
+  const runtime = await getRuntimeForAction(action, reader, runtimes)
+  if (runtime === '') {
+    return false 
   }
   const kind = runtime.split(':')[0]
   switch (kind) {
@@ -181,6 +173,23 @@ async function hasDefaultRemote(action: ActionSpec, reader: ProjectReader, runti
       return true
     default:
       return false
+  }
+}
+
+export async function getRuntimeForAction(action: ActionSpec, reader: ProjectReader, runtimes: RuntimesConfig): Promise<string> {
+  if (action.runtime) {
+    return action.runtime
+  }
+  const pathKind = await reader.getPathKind(action.file)
+  if (pathKind.isFile) {
+    let runtime: string
+    ({ runtime } = actionFileToParts(pathKind.name, runtimes))
+    return runtime
+  } else if (pathKind.isDirectory) {
+    const files = await promiseFilesAndFilterFiles(action.file, reader)
+    return agreeOnRuntime(files, runtimes)
+  } else {
+    return ""
   }
 }
 
