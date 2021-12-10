@@ -694,7 +694,7 @@ async function invokeRemoteBuilder(zipped: Buffer, credentials: Credentials, owC
   const remoteName = getRemoteBuildName()
   const urlResponse = await owClient.actions.invoke({
     name: '/nimbella/websupport/getSignedUrl',
-    params: { fileName: remoteName, dataBucket: true },
+    params: { fileName: remoteName, bucketType: 'build' },
     blocking: true,
     result: true
   })

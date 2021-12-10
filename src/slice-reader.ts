@@ -30,7 +30,7 @@ const S3_PROVIDER = '@nimbella/storage-s3'
 // This is the anchor for the nimbella sdk.  It is included dynamically instead of statically due to
 // webpack considerations in the workbench.  We do not want the dependency followed during module
 // initialization but only on demand.
-let nim: { storageClient: () => StorageClient | PromiseLike<StorageClient> }
+let nim: { storageClient: (type?: string|boolean) => StorageClient | PromiseLike<StorageClient> }
 
 // Get the cache area
 function cacheArea() {
@@ -60,7 +60,7 @@ export async function fetchSlice(sliceName: string): Promise<string> {
   }
   debug('Making cache directory: %s', cache)
   fs.mkdirSync(cache, { recursive: true })
-  const bucket: StorageClient = await getNim().storageClient()
+  const bucket: StorageClient = await getNim().storageClient('build')
   debug('have bucket client')
   const remoteFile = bucket.file(sliceName)
   debug('have remote file for %s', sliceName)
@@ -99,7 +99,7 @@ export async function fetchSlice(sliceName: string): Promise<string> {
 export async function deleteSlice(project: DeployStructure): Promise<void> {
   const sliceName = path.relative(cacheArea(), project.filePath)
   const slicePath = path.join(BUCKET_BUILDER_PREFIX, sliceName)
-  const bucket: StorageClient = await getNim().storageClient()
+  const bucket: StorageClient = await getNim().storageClient('build')
   const remoteFile = bucket.file(slicePath)
   await remoteFile.delete()
 }
