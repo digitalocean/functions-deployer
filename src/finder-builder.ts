@@ -694,7 +694,11 @@ async function invokeRemoteBuilder(zipped: Buffer, credentials: Credentials, owC
   const remoteName = getRemoteBuildName()
   const urlResponse = await owClient.actions.invoke({
     name: '/nimbella/websupport/getSignedUrl',
-    params: { fileName: remoteName, bucketType: 'build' },
+    // The bucketType parameter will be interpreted by versions of the invoked action that
+    // know to interpret it.  It will be ignored by older versions, and dataBucket will govern
+    // instead.  This supports migration from using the data bucket for remote build, to using a
+    // distinguished build bucket for that purpose.
+    params: { fileName: remoteName, bucketType: 'build', dataBucket: true },
     blocking: true,
     result: true
   })
@@ -721,7 +725,7 @@ async function invokeRemoteBuilder(zipped: Buffer, credentials: Credentials, owC
     return invoked.activationId
   } catch (err) {
     if (err.statusCode === 404) {
-      throw new Error('Remote build service is not available on this platform instance.')
+      throw new Error(`Remote build service is not available for runtime '${kind}' on this platform instance.`)
     } else if (err.statusCode >= 500 && err.statusCode <= 599) {
       throw new Error('Remote build service returned error status.')
     } else {
