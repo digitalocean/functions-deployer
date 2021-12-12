@@ -132,10 +132,12 @@ export async function load(apihost: string): Promise<RuntimesConfig> {
 // The parsed runtime configuration will be stored in a local cache.
 // API host parameter is used as the cache key.
 // The cached values will be returned after the first call.
-export async function init(): Promise<RuntimesConfig> {
-  const creds = await getCredentials(authPersister)
-  const apihost = creds.ow.apihost
-  debug_log(`init: creds (${creds})`)
+export async function initRuntimes(): Promise<RuntimesConfig> {
+  // Determine the API host either by reading the credential store or looking in the environment.
+  // The latter is needed when running in a container performing remote build, since there may not be
+  // any credential store.
+  const store = authPersister.loadCredentialStoreIfPresent()
+  const apihost = store?.currentHost || process.env.__OW_API_HOST || process.env.savedOW_API_HOST
   if (!apihost) throw new Error('Missing APIHOST parameter from current credentials')
   if (!RuntimesCache[apihost]) {
     RuntimesCache[apihost] = await load(apihost)
