@@ -118,10 +118,13 @@ async function processRemoteResponse(activationId: string, owClient: openwhisk.C
   }
   if (!activation.response || !activation.response.success) {
     let err = 'Remote build failed to provide a result'
-    if (activation?.response?.result?.error) {
-      err = activation.response.result.error
-      const parts = err.split("Error:")
-      err = parts[parts.length - 1]
+    const resultError = activation?.response?.result?.error
+    if (resultError) {
+      const errMsg = typeof resultError === 'string' ? resultError : resultError.message
+      if (typeof errMsg === 'string') {
+        const parts = errMsg.split("Error:")
+        err = parts[parts.length - 1]
+      }
     }
     return wrapError(new Error(err), context + ' (running remote build)')
   }
