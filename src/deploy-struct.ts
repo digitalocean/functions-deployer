@@ -153,6 +153,7 @@ export interface DeployStructure {
     versions?: VersionEntry // The VersionEntry for credentials.namespace on the selected API host if available
     feedback?: Feedback // The object to use for immediate communication to the user (e.g. for warnings and progress reports)
     error?: Error // Records an error in reading or preparing, or a terminal error in building; the structure should not be used
+    unresolvedVariables?: string[] // Variables that couldn't be resolved in project reading (error may be set also)
     webBuildError?: Error // Indicates an error in building the web component; the structure is usable but the failure should be reported
     webBuildResult?: string // activation id of remote build
     sequences?: ActionSpec[] // detected during action deployment and deferred until ordinary actions are deployed

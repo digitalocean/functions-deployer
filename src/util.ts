@@ -84,7 +84,11 @@ export async function loadProjectConfig(configFile: string, envPath: string, fil
       } else {
         err.message = `${errMsgPrefix}`
       }
-      return errorStructure(err)
+      const errans = errorStructure(err)
+      if (err.unresolved) {
+        errans.unresolvedVariables = err.unresolved
+      }
+      return errans
     }
   })
 }
@@ -793,7 +797,9 @@ export function substituteFromEnvAndFiles(input: string, envPath: string, projec
   }
   if (badVars.length > 0) {
     const formatted = "'" + badVars.join("', '") + "'"
-    throw new Error('The following substitutions could not be resolved: ' + formatted)
+    const toThrow =  new Error('The following substitutions could not be resolved: ' + formatted)
+    toThrow['unresolved'] = badVars
+    throw toThrow
   }
   if (warn) {
     feedback.warn("Using '${}' for dictionary substitution is now deprecated; use '$()'")
