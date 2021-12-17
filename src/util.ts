@@ -55,10 +55,11 @@ export function setInBrowserFlag(value: boolean): void {
 //
 
 // Read the project config file, with validation
-export async function loadProjectConfig(configFile: string, envPath: string, filePath: string, reader: ProjectReader,
+export async function loadProjectConfig(configFile: string, envPath: string, buildEnvPath: string, filePath: string, reader: ProjectReader,
   feedback: Feedback, runtimesConfig: RuntimesConfig): Promise<DeployStructure> {
   return reader.readFileContents(configFile).then(async data => {
     try {
+      // Read the config, substituting from env
       const content = substituteFromEnvAndFiles(String(data), envPath, filePath, feedback)
       let config: Record<string, any>
       if (configFile.endsWith('.json')) {
@@ -70,13 +71,18 @@ export async function loadProjectConfig(configFile: string, envPath: string, fil
           config = yaml.safeLoad(content) as Record<string, any>
         }
       }
+      // Check config
       const configError = validateDeployConfig(config, runtimesConfig)
       if (configError) {
         throw new Error(configError)
       } else {
         removeEmptyStringMembers(config)
-        return config
       }
+      // Add build environment if specified
+      if (buildEnvPath) {
+        config.buildEnv = getPropsFromFile(buildEnvPath)
+      }
+      return config
     } catch (err) {
       const errMsgPrefix = `Invalid project configuration file (${configFile})`
       if (err.message) {

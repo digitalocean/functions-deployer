@@ -83,7 +83,7 @@ export function readPrepareAndBuild(path: string, owOptions: OWOptions, credenti
 export function readAndPrepare(path: string, owOptions: OWOptions, credentials: Credentials, persister: Persister,
   flags: Flags, runtimes: RuntimesConfig, userAgent?: string, feedback?: Feedback): Promise<DeployStructure> {
   const includer = makeIncluder(flags.include, flags.exclude)
-  return readProject(path, flags.env, includer, flags.remoteBuild, feedback, runtimes).then(spec => spec.error ? spec
+  return readProject(path, flags.env, flags.buildEnv, includer, flags.remoteBuild, feedback, runtimes).then(spec => spec.error ? spec
     : prepareToDeploy(spec, owOptions, credentials, persister, flags))
 }
 
@@ -105,12 +105,12 @@ export function deploy(todeploy: DeployStructure): Promise<DeployResponse> {
 }
 
 // Read the information contained in the project, initializing the DeployStructure
-export async function readProject(projectPath: string, envPath: string, includer: Includer, requestRemote: boolean,
+export async function readProject(projectPath: string, envPath: string, buildEnvPath: string, includer: Includer, requestRemote: boolean,
   feedback: Feedback = new DefaultFeedback(), runtimes: RuntimesConfig): Promise<DeployStructure> {
   debug('Starting readProject, projectPath=%s, envPath=%s', projectPath, envPath)
   let ans: DeployStructure
   try {
-    const topLevel = await readTopLevel(projectPath, envPath, includer, false, feedback)
+    const topLevel = await readTopLevel(projectPath, envPath, buildEnvPath, includer, false, feedback)
     const parts = await buildStructureParts(topLevel, runtimes)
     ans = assembleInitialStructure(parts)
   } catch (err) {
@@ -130,7 +130,7 @@ export async function readProject(projectPath: string, envPath: string, includer
       return errorStructure(new Error(`Project '${projectPath}' cannot be deployed from the cloud because it requires building`))
     }
     try {
-      const topLevel = await readTopLevel(projectPath, envPath, includer, true, feedback)
+      const topLevel = await readTopLevel(projectPath, envPath, buildEnvPath, includer, true, feedback)
       const parts = await buildStructureParts(topLevel, runtimes)
       ans = assembleInitialStructure(parts)
     } catch (err) {

@@ -35,6 +35,7 @@ interface TopLevel {
     packages: string
     config?: string
     env?: string
+    buildEnv?: string
     strays: string[]
     filePath: string
     githubPath: string
@@ -42,7 +43,7 @@ interface TopLevel {
     reader: ProjectReader
     feedback: Feedback
 }
-export async function readTopLevel(filePath: string, env: string, includer: Includer, mustBeLocal: boolean, feedback: Feedback): Promise<TopLevel> {
+export async function readTopLevel(filePath: string, env: string, buildEnv: string, includer: Includer, mustBeLocal: boolean, feedback: Feedback): Promise<TopLevel> {
   // The mustBeLocal arg is only important if the filePath denotes a github location.  In that case, a true value for
   // mustBeLocal causes the github contents to be fetched to a local cache and a FileReader is used.  A false value
   // causes a GithubReader to be used.
@@ -51,6 +52,9 @@ export async function readTopLevel(filePath: string, env: string, includer: Incl
   // Before doing the more expensive operations, check existence of env, which is cheap.  If does not exist we will fail later anyway.
   if (env && !fs.existsSync(env)) {
     throw new Error(`The specified environment file '${env}' does not exist`)
+  }
+  if (buildEnv && !fs.existsSync(buildEnv)) {
+    throw new Error(`The specified environment file '${buildEnv}' does not exist`)
   }
   let githubPath: string
   let reader: ProjectReader
@@ -126,7 +130,7 @@ export async function readTopLevel(filePath: string, env: string, includer: Incl
       debug('github path was %s', githubPath)
       debug('filePath is %s', filePath)
     }
-    const ans = { web, packages, config, strays, filePath, env, githubPath, includer, reader, feedback }
+    const ans = { web, packages, config, strays, filePath, env, buildEnv, githubPath, includer, reader, feedback }
     debug('readTopLevel returning %O', ans)
     return ans
   })
@@ -135,8 +139,8 @@ export async function readTopLevel(filePath: string, env: string, includer: Incl
 // Probe the top level structure to obtain the major parts of the final config.  Spawn builders for those parts and
 // assemble a "Promise.all" for the combined work
 export async function buildStructureParts(topLevel: TopLevel, runtimes: RuntimesConfig): Promise<DeployStructure[]> {
-  const { web, packages, config, strays, filePath, env, githubPath, includer, reader, feedback } = topLevel
-  let configPart = await readConfig(config, env, filePath, includer, reader, feedback, runtimes)
+  const { web, packages, config, strays, filePath, env, buildEnv, githubPath, includer, reader, feedback } = topLevel
+  let configPart = await readConfig(config, env, buildEnv, filePath, includer, reader, feedback, runtimes)
   const deployerAnnotation = configPart.deployerAnnotation || await getDeployerAnnotation(filePath, githubPath)
   configPart = Object.assign(configPart, { strays, filePath, githubPath, includer, reader, feedback, deployerAnnotation })
   const displayName = getBestProjectName(configPart)
@@ -397,7 +401,7 @@ function duplicateName(actionName: string, formerUse: string, newUse: string) {
 }
 
 // Read the config file if present.  For convenience, the extra information not merged from elsewhere is tacked on here
-async function readConfig(configFile: string, envPath: string, filePath: string, includer: Includer, reader: ProjectReader,
+async function readConfig(configFile: string, envPath: string, buildEnvPath: string, filePath: string, includer: Includer, reader: ProjectReader,
   feedback: Feedback, runtimesConfig: RuntimesConfig): Promise<DeployStructure> {
   if (!configFile) {
     debug('No config file found')
@@ -405,7 +409,7 @@ async function readConfig(configFile: string, envPath: string, filePath: string,
     return Promise.resolve(ans)
   }
   debug('Reading config file')
-  return loadProjectConfig(configFile, envPath, filePath, reader, feedback, runtimesConfig).then(config => trimConfigWithIncluder(config, includer))
+  return loadProjectConfig(configFile, envPath, buildEnvPath, filePath, reader, feedback, runtimesConfig).then(config => trimConfigWithIncluder(config, includer))
     .catch(err => errorStructure(err))
 }
 

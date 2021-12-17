@@ -111,23 +111,24 @@ function buildAction(action: ActionSpec, spec: DeployStructure, runtimes: Runtim
   }
   debug('building action %O', action)
   let actionDir
-  const { reader, flags, feedback, sharedBuilds, slice } = spec
+  const { reader, flags, feedback, sharedBuilds, slice, buildEnv } = spec
   switch (action.build) {
   case 'build.sh':
     actionDir = makeLocal(reader, action.file)
-    return scriptBuilder('./build.sh', actionDir, action.displayFile, flags, slice, feedback).then(() => identifyActionFiles(action,
+    return scriptBuilder('./build.sh', actionDir, action.displayFile, flags, buildEnv, slice, feedback).then(() => identifyActionFiles(action,
       flags.incremental, flags.verboseZip, reader, feedback, runtimes))
   case 'build.cmd':
     actionDir = makeLocal(reader, action.file)
-    return scriptBuilder('build.cmd', actionDir, action.displayFile, flags, slice, feedback).then(() => identifyActionFiles(action,
+    return scriptBuilder('build.cmd', actionDir, action.displayFile, flags, buildEnv, slice, feedback).then(() => identifyActionFiles(action,
       flags.incremental, flags.verboseZip, reader, feedback, runtimes))
   case '.build':
     actionDir = makeLocal(reader, action.file)
-    return outOfLineBuilder(actionDir, action.displayFile, sharedBuilds, true, flags, slice, reader, feedback).then(() => identifyActionFiles(action,
-      flags.incremental, flags.verboseZip, reader, feedback, runtimes))
+    return outOfLineBuilder(actionDir, action.displayFile, sharedBuilds, true, flags, buildEnv, slice, reader, feedback)
+      .then(() => identifyActionFiles(action,
+        flags.incremental, flags.verboseZip, reader, feedback, runtimes))
   case 'package.json':
     actionDir = makeLocal(reader, action.file)
-    return npmBuilder(actionDir, action.displayFile, flags, slice, feedback).then(() => identifyActionFiles(action,
+    return npmBuilder(actionDir, action.displayFile, flags, buildEnv, slice, feedback).then(() => identifyActionFiles(action,
       flags.incremental, flags.verboseZip, reader, feedback, runtimes))
   case '.include':
   case 'identify':
@@ -275,7 +276,8 @@ function readFileAsList(file: string, reader: ProjectReader): Promise<string[]> 
 // Perform a build using either a script or a directory pointed to by a .build directive
 // The .build directive is known to exist but has not been read yet.
 function outOfLineBuilder(filepath: string, displayPath: string, sharedBuilds: BuildTable,
-  isAction: boolean, flags: Flags, slice: boolean, reader: ProjectReader, feedback: Feedback): Promise<any> {
+  isAction: boolean, flags: Flags, buildEnv: Record<string, string>, slice: boolean, reader: ProjectReader,
+  feedback: Feedback): Promise<any> {
   const buildPath = path.join(filepath, '.build')
   return readFileAsList(buildPath, reader).then(async contents => {
     if (contents.length === 0 || contents.length > 1) {
@@ -285,7 +287,7 @@ function outOfLineBuilder(filepath: string, displayPath: string, sharedBuilds: B
     const stat: PathKind = await reader.getPathKind(redirected)
     if (stat.isFile) {
       // Simply run linked-to script in the current directory
-      return scriptBuilder(redirected, filepath, displayPath, flags, slice, feedback)
+      return scriptBuilder(redirected, filepath, displayPath, flags, buildEnv, slice, feedback)
     } else if (stat.isDirectory) {
       // Look in the directory to find build to run
       return readDirectory(redirected, reader).then(items => {
@@ -297,11 +299,11 @@ function outOfLineBuilder(filepath: string, displayPath: string, sharedBuilds: B
         case 'build.cmd': {
           const script = makeLocal(reader, redirected, special)
           // Like the direct link case, just a different way of doing it
-          build = () => scriptBuilder(script, cwd, displayPath, flags, slice, feedback)
+          build = () => scriptBuilder(script, cwd, displayPath, flags, buildEnv, slice, feedback)
           break
         }
         case 'package.json':
-          build = () => npmBuilder(cwd, displayPath, flags, slice, feedback)
+          build = () => npmBuilder(cwd, displayPath, flags, buildEnv, slice, feedback)
           break
         default:
           return Promise.reject(new Error(redirected + ' is a directory but contains no build information'))
@@ -387,21 +389,21 @@ export function buildWeb(spec: DeployStructure, runtimes: RuntimesConfig): Promi
   debug('Performing Web build')
   let scriptPath
   const displayPath = path.join(getBestProjectName(spec), 'web')
-  const { reader, flags, feedback, sharedBuilds, webBuild, slice } = spec
+  const { reader, flags, feedback, sharedBuilds, webBuild, slice, buildEnv } = spec
   switch (webBuild) {
   case 'build.sh':
     scriptPath = makeLocal(reader, 'web')
-    return scriptBuilder('./build.sh', scriptPath, displayPath, flags, slice, feedback).then(() => identifyWebFiles('web', reader))
+    return scriptBuilder('./build.sh', scriptPath, displayPath, flags, buildEnv, slice, feedback).then(() => identifyWebFiles('web', reader))
   case 'build.cmd':
     debug('cwd for windows build is %s', 'web')
     scriptPath = makeLocal(reader, 'web')
-    return scriptBuilder('build.cmd', scriptPath, displayPath, flags, slice, feedback).then(() => identifyWebFiles('web', reader))
+    return scriptBuilder('build.cmd', scriptPath, displayPath, flags, buildEnv, slice, feedback).then(() => identifyWebFiles('web', reader))
   case '.build':
     // Does its own localizing
-    return outOfLineBuilder('web', displayPath, sharedBuilds, false, flags, slice, reader, feedback).then(() => identifyWebFiles('web', reader))
+    return outOfLineBuilder('web', displayPath, sharedBuilds, false, flags, buildEnv, slice, reader, feedback).then(() => identifyWebFiles('web', reader))
   case 'package.json':
     scriptPath = makeLocal(reader, 'web')
-    return npmBuilder(scriptPath, displayPath, flags, slice, feedback).then(() => identifyWebFiles('web', reader))
+    return npmBuilder(scriptPath, displayPath, flags, buildEnv, slice, feedback).then(() => identifyWebFiles('web', reader))
   case '.include':
   case 'identify':
     return identifyWebFiles('web', reader)
@@ -409,7 +411,7 @@ export function buildWeb(spec: DeployStructure, runtimes: RuntimesConfig): Promi
     checkBuiltLocally(reader, 'web')
     return doRemoteWebBuild(spec, runtimes)
   default:
-    throw new Error('Unknown build type for web directory: ' + build)
+    throw new Error('Unknown build type for web directory: ' + webBuild)
   }
 }
 
@@ -908,7 +910,7 @@ async function autozipBuilder(pairs: string[][], action: ActionSpec, incremental
 
 // Subroutine for performing a "real" build requiring a spawn.
 function build(cmd: string, args: string[], realPath: string, displayPath: string, infoMsg: string,
-  errorTag: string, verbose: boolean, slice: boolean, feedback: Feedback): Promise<any> {
+  errorTag: string, verbose: boolean, buildEnv: Record<string, string>, slice: boolean, feedback: Feedback): Promise<any> {
   debug('building with realPath=%s and displayPath=%s', realPath, displayPath)
   let result = ''
   let time = Date.now()
@@ -920,10 +922,11 @@ function build(cmd: string, args: string[], realPath: string, displayPath: strin
       feedback.progress('Still running', infoMsg, 'in', displayPath)
     }
   }
+  const env = buildEnv ? Object.assign({}, process.env, buildEnv) : process.env
   return new Promise(function(resolve, reject) {
     feedback.progress('Started running', infoMsg, 'in', displayPath)
     const shell = process.platform === 'win32' ? true : process.env.shell || '/bin/bash'
-    const child = spawn(cmd, args, { cwd: realPath, shell })
+    const child = spawn(cmd, args, { cwd: realPath, shell, env })
     if (verbose && !slice) {
 	  // Verbose build behavior when build is local
       child.stdout.on('data', (data) => feedback.progress(String(data)))
@@ -963,7 +966,7 @@ function build(cmd: string, args: string[], realPath: string, displayPath: strin
 }
 
 // The builder for a shell script
-function scriptBuilder(script: string, realPath: string, displayPath: string, flags: Flags, slice: boolean, 
+function scriptBuilder(script: string, realPath: string, displayPath: string, flags: Flags, buildEnv: Record<string,string>, slice: boolean, 
 	feedback: Feedback): Promise<any> {
   if (flags.incremental && scriptAppearsBuilt(realPath)) {
     if (flags.verboseBuild) {
@@ -971,7 +974,7 @@ function scriptBuilder(script: string, realPath: string, displayPath: string, fl
     }
     return Promise.resolve(true)
   }
-  return build(script, [], realPath, displayPath, script, script, flags.verboseBuild, slice, feedback)
+  return build(script, [], realPath, displayPath, script, script, flags.verboseBuild, buildEnv, slice, feedback)
 }
 
 // Determine if a shell-script style build appears to have been run.  For this we just check for the presence of a `.built` file since
@@ -1030,7 +1033,7 @@ function makeNpmPackageAppearBuilt(filepath: string) {
 // The builder for npm|yarn install --production or npm|yarn install && npm|yarn run build
 // A package.json must be present since this builder wouldn't have been invoked otherwise.
 // This doesn't mean that npm|yarn install will succeed, just that, if it fails it is for some other reason
-function npmBuilder(filepath: string, displayPath: string, flags: Flags, slice: boolean, feedback: Feedback): Promise<any> {
+function npmBuilder(filepath: string, displayPath: string, flags: Flags, buildEnv: Record<string,string>, slice: boolean, feedback: Feedback): Promise<any> {
   debug('Performing npm build for %s', filepath)
   const cmd = flags.yarn ? 'yarn' : 'npm'
   const npmRunBuild = buildScriptExists(filepath)
@@ -1051,7 +1054,7 @@ function npmBuilder(filepath: string, displayPath: string, flags: Flags, slice: 
   } else {
     debug('Build was not incremental')
   }
-  return build(cmd, args, filepath, displayPath, infoMsg, `${cmd} install`, flags.verboseBuild, slice, feedback).then(
+  return build(cmd, args, filepath, displayPath, infoMsg, `${cmd} install`, flags.verboseBuild, buildEnv, slice, feedback).then(
     () => makeNpmPackageAppearBuilt(filepath))
 }
 

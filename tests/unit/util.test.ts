@@ -35,7 +35,7 @@ describe('test validation of loading project configuration', () => {
         return Promise.resolve('')
       }
     }
-    const result = await loadProjectConfig('project.yml', '', '', (reader as unknown) as ProjectReader, null, {} as RuntimesConfig)
+    const result = await loadProjectConfig('project.yml', '', '', '', (reader as unknown) as ProjectReader, null, {} as RuntimesConfig)
     let expectedText
     if (process.version.startsWith('v16')) {
       expectedText = `Cannot read properties of undefined (reading 'slice')`
@@ -50,7 +50,7 @@ describe('test validation of loading project configuration', () => {
         return Promise.resolve('packages:')
       }
     }
-    const result = await loadProjectConfig('project.yml', '', '', (reader as unknown) as ProjectReader, null, {} as RuntimesConfig)
+    const result = await loadProjectConfig('project.yml', '', '', '', (reader as unknown) as ProjectReader, null, {} as RuntimesConfig)
     expect(result).toEqual({packages: null})
   })
 })
