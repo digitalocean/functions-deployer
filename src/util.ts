@@ -333,6 +333,7 @@ export function validateDeployConfig(arg: any, runtimesConfig: RuntimesConfig): 
       case 'credentials':
       case 'flags':
       case 'deployerAnnotation':
+      case 'buildEnv':
         if (slice) continue
       // In a slice we accept these without further validation; otherwise, they are illegal
       // Otherwise, fall through

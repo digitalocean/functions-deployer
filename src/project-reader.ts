@@ -175,6 +175,7 @@ export function assembleInitialStructure(parts: DeployStructure[]): DeployStruct
       }
     })
   }
+  debug('Result of assembly: %O', configPart)
   return configPart
 }
 
@@ -409,8 +410,10 @@ async function readConfig(configFile: string, envPath: string, buildEnvPath: str
     return Promise.resolve(ans)
   }
   debug('Reading config file')
-  return loadProjectConfig(configFile, envPath, buildEnvPath, filePath, reader, feedback, runtimesConfig).then(config => trimConfigWithIncluder(config, includer))
+  const config = loadProjectConfig(configFile, envPath, buildEnvPath, filePath, reader, feedback, runtimesConfig).then(config => trimConfigWithIncluder(config, includer))
     .catch(err => errorStructure(err))
+  debug('Config contents: %O', config)
+  return config
 }
 
 // Given a DeployStructure with web and package sections, trim those sections according to the rules of an Includer
