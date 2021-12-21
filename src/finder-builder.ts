@@ -12,7 +12,8 @@
  */
 
 import { spawn } from 'child_process'
-import { DeployStructure, ActionSpec, PackageSpec, WebResource, BuildTable, Flags, ProjectReader, PathKind, Feedback } from './deploy-struct'
+import { DeployStructure, ActionSpec, PackageSpec, WebResource, BuildTable, Flags, ProjectReader, PathKind, 
+  Credentials, Feedback } from './deploy-struct'
 import {
   actionFileToParts, filterFiles, mapPackages, mapActions, convertToResources, convertPairsToResources,
   promiseFilesAndFilterFiles, agreeOnRuntime, getBestProjectName, getExclusionList
@@ -520,7 +521,7 @@ async function doRemoteActionBuild(action: ActionSpec, project: DeployStructure,
   debug('outputPromise settled for project slice of action %s', action.name)
   const toSend = (output as memoryStreams.WritableStream).toBuffer()
   debug('sending the remote build request for project %s and action %s', project.filePath, actionName)
-  action.buildResult = await invokeRemoteBuilder(toSend, project.owClient, project.feedback, runtimes, action)
+  action.buildResult = await invokeRemoteBuilder(toSend, project.credentials, project.owClient, project.feedback, runtimes, action)
   return action
 }
 
@@ -589,7 +590,7 @@ async function doRemoteWebBuild(project: DeployStructure, runtimes: RuntimesConf
   zip.finalize()
   await outputPromise
   const toSend = (output as memoryStreams.WritableStream).toBuffer()
-  project.webBuildResult = await invokeRemoteBuilder(toSend, project.owClient, project.feedback, runtimes)
+  project.webBuildResult = await invokeRemoteBuilder(toSend, project.credentials, project.owClient, project.feedback, runtimes)
   return [] // An array of WebResource is expected but since no deployment will be done locally an empty one suffices
 }
 
@@ -687,9 +688,63 @@ function makeProjectSliceZip(context: string): ProjectSliceZip {
   return { output, zip, outputPromise }
 }
 
-// Invoke the remote builder, return the response.  The 'action' argument is omitted for web builds
-async function invokeRemoteBuilder(zipped: Buffer, owClient: openwhisk.Client, feedback: Feedback, runtimes: RuntimesConfig, action?: ActionSpec): Promise<string> {
+// Generate a remote build name for the "legacy" path
+const BUCKET_BUILDER_PREFIX = '.nimbella/builds'
+export function getRemoteBuildName(): string {
+  const buildName = new Date().toISOString().replace(/:/g, '-')
+  return `${BUCKET_BUILDER_PREFIX}/${buildName}`
+}
+
+// Invoke the remote build the traditional way, using the data bucket and assuming there are storage credentials
+async function legacyRemoteBuilder(zipped: Buffer, credentials: Credentials, owClient: openwhisk.Client, feedback: Feedback, runtimes: RuntimesConfig, action?: ActionSpec): Promise<string> {
   // Upload project slice to the user's data bucket
+  const remoteName = getRemoteBuildName()
+  const urlResponse = await owClient.actions.invoke({
+    name: '/nimbella/websupport/getSignedUrl',
+    params: { fileName: remoteName, dataBucket: true },
+    blocking: true,
+    result: true
+  })
+  const url = urlResponse.url
+  if (!url) {
+    throw new Error(`Response from getSignedUrl was not a URL: ${urlResponse}`)
+  }
+  debug('remote build url is %s', url)
+  const result = await axios.put(url, zipped)
+  if (result.status !== 200) {
+    throw new Error(`Bad response [$result.status}] when uploading '${remoteName}' for remote build`)
+  }
+  debug('axios put of url was successful')
+  // Invoke the remote builder action.  The action name incorporates the runtime 'kind'.
+  // That action will re-invoke the nim deployer in the target runtime.
+  const kind = action ? action.runtime : 'nodejs:default'
+  const activityName = action ? `action '${action.name}'` : 'web content'
+  const runtime = canonicalRuntime(runtimes, kind).replace(':', '_')
+  const buildActionName = `${BUILDER_ACTION_STEM}${runtime}`
+  debug(`Invoking remote build action '${buildActionName}' for build '${path.basename(remoteName)} of ${activityName}`)
+  try {
+    const invoked = await owClient.actions.invoke({ name: buildActionName, params: { toBuild: remoteName } })
+    feedback.progress(`Submitted ${activityName} for remote building and deployment in runtime ${kind}`)
+    return invoked.activationId
+  } catch (err) {
+    if (err.statusCode === 404) {
+      throw new Error(`Remote build service is not available for runtime '${kind}' on this platform instance.`)
+    } else if (err.statusCode >= 500 && err.statusCode <= 599) {
+      throw new Error('Remote build service returned error status.')
+    } else {
+      throw err
+    }
+  }
+}
+
+// Invoke the remote builder, return the response.  The 'action' argument is omitted for web builds
+async function invokeRemoteBuilder(zipped: Buffer, credentials: Credentials, owClient: openwhisk.Client, feedback: Feedback, runtimes: RuntimesConfig, action?: ActionSpec): Promise<string> {
+  if (credentials.storageKey) {
+    // For now, we assume that if a storage key is present, then the data bucket should be used in the
+    // traditional way.
+    return legacyRemoteBuilder(zipped, credentials, owClient, feedback, runtimes, action)
+  } // otherwise ...
+  // Upload project slice to the specialized build bucket
   const uploadResponse = await owClient.actions.invoke({
     name: '/nimbella/builder/getUploadUrl',
     blocking: true,
