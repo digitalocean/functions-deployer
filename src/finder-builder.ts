@@ -12,11 +12,10 @@
  */
 
 import { spawn } from 'child_process'
-import { DeployStructure, ActionSpec, PackageSpec, WebResource, BuildTable, Flags, ProjectReader, PathKind, Feedback, Credentials } from './deploy-struct'
+import { DeployStructure, ActionSpec, PackageSpec, WebResource, BuildTable, Flags, ProjectReader, PathKind, Feedback } from './deploy-struct'
 import {
   actionFileToParts, filterFiles, mapPackages, mapActions, convertToResources, convertPairsToResources,
-  promiseFilesAndFilterFiles, agreeOnRuntime,
-  getBestProjectName, getExclusionList
+  promiseFilesAndFilterFiles, agreeOnRuntime, getBestProjectName, getExclusionList
 } from './util'
 import * as path from 'path'
 import * as fs from 'fs'
@@ -29,7 +28,6 @@ import makeDebug from 'debug'
 import { isGithubRef } from './github'
 import { Writable } from 'stream'
 import * as memoryStreams from 'memory-streams'
-import { getRemoteBuildName } from './slice-reader'
 import openwhisk = require('openwhisk')
 import { RuntimesConfig, canonicalRuntime } from './runtimes'
 
@@ -110,7 +108,7 @@ function buildAction(action: ActionSpec, spec: DeployStructure, runtimes: Runtim
     return Promise.resolve(action)
   }
   debug('building action %O', action)
-  let actionDir
+  let actionDir: string
   const { reader, flags, feedback, sharedBuilds, slice, buildEnv } = spec
   switch (action.build) {
   case 'build.sh':
@@ -387,7 +385,7 @@ export function getBuildForWeb(filepath: string, reader: ProjectReader): Promise
 
 export function buildWeb(spec: DeployStructure, runtimes: RuntimesConfig): Promise<WebResource[]> {
   debug('Performing Web build')
-  let scriptPath
+  let scriptPath: string
   const displayPath = path.join(getBestProjectName(spec), 'web')
   const { reader, flags, feedback, sharedBuilds, webBuild, slice, buildEnv } = spec
   switch (webBuild) {
@@ -474,9 +472,6 @@ function checkForNodeModules(items: string[]) {
 // And, there cannot be an `.include` entry that is absolute or has a `../` directive.
 async function checkRemoteBuildPreReqs(filepath: string, project: DeployStructure) {
   debug(`checking remote build pre-reqs for '${filepath}'`)
-  if (!project.credentials?.storageKey) {
-    throw new Error('Remote building requires storage credentials')
-  }
   const reader = project.reader
   if ((await reader.getPathKind(filepath)).isDirectory) {
     const include = path.join(filepath, '.include')
@@ -525,7 +520,7 @@ async function doRemoteActionBuild(action: ActionSpec, project: DeployStructure,
   debug('outputPromise settled for project slice of action %s', action.name)
   const toSend = (output as memoryStreams.WritableStream).toBuffer()
   debug('sending the remote build request for project %s and action %s', project.filePath, actionName)
-  action.buildResult = await invokeRemoteBuilder(toSend, project.credentials, project.owClient, project.feedback, runtimes, action)
+  action.buildResult = await invokeRemoteBuilder(toSend, project.owClient, project.feedback, runtimes, action)
   return action
 }
 
@@ -594,7 +589,7 @@ async function doRemoteWebBuild(project: DeployStructure, runtimes: RuntimesConf
   zip.finalize()
   await outputPromise
   const toSend = (output as memoryStreams.WritableStream).toBuffer()
-  project.webBuildResult = await invokeRemoteBuilder(toSend, project.credentials, project.owClient, project.feedback, runtimes)
+  project.webBuildResult = await invokeRemoteBuilder(toSend, project.owClient, project.feedback, runtimes)
   return [] // An array of WebResource is expected but since no deployment will be done locally an empty one suffices
 }
 
@@ -693,27 +688,21 @@ function makeProjectSliceZip(context: string): ProjectSliceZip {
 }
 
 // Invoke the remote builder, return the response.  The 'action' argument is omitted for web builds
-async function invokeRemoteBuilder(zipped: Buffer, credentials: Credentials, owClient: openwhisk.Client, feedback: Feedback, runtimes: RuntimesConfig, action?: ActionSpec): Promise<string> {
+async function invokeRemoteBuilder(zipped: Buffer, owClient: openwhisk.Client, feedback: Feedback, runtimes: RuntimesConfig, action?: ActionSpec): Promise<string> {
   // Upload project slice to the user's data bucket
-  const remoteName = getRemoteBuildName()
-  const urlResponse = await owClient.actions.invoke({
-    name: '/nimbella/websupport/getSignedUrl',
-    // The bucketType parameter will be interpreted by versions of the invoked action that
-    // know to interpret it.  It will be ignored by older versions, and dataBucket will govern
-    // instead.  This supports migration from using the data bucket for remote build, to using a
-    // distinguished build bucket for that purpose.
-    params: { fileName: remoteName, bucketType: 'build', dataBucket: true },
+  const uploadResponse = await owClient.actions.invoke({
+    name: '/nimbella/builder/getUploadUrl',
     blocking: true,
     result: true
   })
-  const url = urlResponse.url
-  if (!url) {
-    throw new Error(`Response from getSignedUrl was not a URL: ${urlResponse}`)
+  const { url, sliceName } = uploadResponse
+  if (!url || !sliceName) {
+    throw new Error(`Response from getUploadUrl was not as expected: ${uploadResponse}`)
   }
   debug('remote build url is %s', url)
   const result = await axios.put(url, zipped)
   if (result.status !== 200) {
-    throw new Error(`Bad response [$result.status}] when uploading '${remoteName}' for remote build`)
+    throw new Error(`Bad response [$result.status}] when uploading '${sliceName}' for remote build`)
   }
   debug('axios put of url was successful')
   // Invoke the remote builder action.  The action name incorporates the runtime 'kind'.
@@ -722,9 +711,9 @@ async function invokeRemoteBuilder(zipped: Buffer, credentials: Credentials, owC
   const activityName = action ? `action '${action.name}'` : 'web content'
   const runtime = canonicalRuntime(runtimes, kind).replace(':', '_')
   const buildActionName = `${BUILDER_ACTION_STEM}${runtime}`
-  debug(`Invoking remote build action '${buildActionName}' for build '${path.basename(remoteName)} of ${activityName}`)
+  debug(`Invoking remote build action '${buildActionName}' for build '${path.basename(sliceName)} of ${activityName}`)
   try {
-    const invoked = await owClient.actions.invoke({ name: buildActionName, params: { toBuild: remoteName } })
+    const invoked = await owClient.actions.invoke({ name: buildActionName, params: { toBuild: sliceName } })
     feedback.progress(`Submitted ${activityName} for remote building and deployment in runtime ${kind}`)
     return invoked.activationId
   } catch (err) {

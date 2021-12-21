@@ -16,69 +16,31 @@ import * as fs from 'fs'
 import makeDebug from 'debug'
 import Zip from 'adm-zip'
 import * as rimraf from 'rimraf'
-import { Credentials, DeployStructure } from './deploy-struct'
-import { StorageClient } from '@nimbella/storage'
-import { getCredentials, authPersister } from './credentials'
+import { DeployStructure } from './deploy-struct'
+import { wskRequest } from './util'
+import axios from 'axios'
 const debug = makeDebug('nim:deployer:slice-reader')
 const TEMP = process.platform === 'win32' ? process.env.TEMP : '/tmp'
-const BUCKET_BUILDER_PREFIX = '.nimbella/builds'
-const GCS_PROVIDER = '@nimbella/storage-gcs'
-const S3_PROVIDER = '@nimbella/storage-s3'
+const SIGNED_URL = 'buildmgr/getSignedUrl'
 
 // Supports the fetching and deletion of project slices from the data bucket and related management functions
-
-// This is the anchor for the nimbella sdk.  It is included dynamically instead of statically due to
-// webpack considerations in the workbench.  We do not want the dependency followed during module
-// initialization but only on demand.
-let nim: { storageClient: (type?: string|boolean) => StorageClient | PromiseLike<StorageClient> }
 
 // Get the cache area
 function cacheArea() {
   return path.join(TEMP, 'slices')
 }
 
-// Get the nimbella sdk
-function getNim() {
-  if (!nim) {
-    nim = require('@nimbella/sdk')
-  }
-  return nim
-}
-
-// Generate a remote build name
-export function getRemoteBuildName(): string {
-  const buildName = new Date().toISOString().replace(/:/g, '-')
-  return `${BUCKET_BUILDER_PREFIX}/${buildName}`
-}
-
 // Fetch the slice to cache storage.
 export async function fetchSlice(sliceName: string): Promise<string> {
-  await ensureObjectStoreCredentials()
-  const cache = path.join(cacheArea(), path.basename(sliceName))
+  const cache = path.join(cacheArea(), sliceName)
   if (fs.existsSync(cache)) {
     rimraf.sync(cache)
   }
   debug('Making cache directory: %s', cache)
   fs.mkdirSync(cache, { recursive: true })
-  const bucket: StorageClient = await getNim().storageClient('build')
-  debug('have bucket client')
-  const remoteFile = bucket.file(sliceName)
-  debug('have remote file for %s', sliceName)
-  const exists = await remoteFile.exists()
-  debug('have exists response: %O', exists)
-  if (!exists) {
-    debug('the slice does not exist')
-    return ''
-  }
-  debug('have remote file %s ready to download', sliceName)
-  const response = await remoteFile.download()
-  debug('have download response: %O', response)
-  if (!response) {
-    debug('could not download slice')
-    return ''
-  }
-  debug('have valid download response')
-  const zip = new Zip(response)
+  const url = await getUrl(sliceName, 'read')
+  const { data } = await axios.get(url)  
+  const zip = new Zip(data)
   debug('zip file has %d entries', zip.getEntries().length)
   for (const entry of zip.getEntries().filter(entry => !entry.isDirectory)) {
     const target = path.join(cache, entry.entryName)
@@ -93,54 +55,23 @@ export async function fetchSlice(sliceName: string): Promise<string> {
   return cache
 }
 
-// Delete.  In this function we assume object store credentials are valid since the fetch
-// operation will have been called earlier.  The function assumes the DeployStructure is
-// a slice without further checks.
-export async function deleteSlice(project: DeployStructure): Promise<void> {
-  const sliceName = path.relative(cacheArea(), project.filePath)
-  const slicePath = path.join(BUCKET_BUILDER_PREFIX, sliceName)
-  const bucket: StorageClient = await getNim().storageClient('build')
-  const remoteFile = bucket.file(slicePath)
-  await remoteFile.delete()
+async function getUrl(sliceName: string, action: string): Promise<string> {
+  const bucket = process.env['BUILDER_BUCKET_NAME']
+  const query = 'action=' + action +'&bucket=' + bucket + '&object=' + sliceName
+  const reqUrl = process.env['__OW_API_HOST'] + '/api/v1/web/nimbella/buildmgr/getSignedUrl.json?' + query
+  console.log('Invoking url', reqUrl)
+  const auth = process.env['__OW_API_KEY']
+  console.log('Using auth', auth)    
+  const invokeResponse = await wskRequest(reqUrl, auth)
+  console.log('Response:')
+  console.dir(invokeResponse, { depth: null })
+  const { url } = invokeResponse as any
+  return url  
 }
 
-// This function is to support testing the slice-reader locally.  Normally, the slice-reader runs in an action
-// that has object store credentials stored in the environment.  If it runs locally, those credentials will not
-// (usually) be there.  So, suitable credentials are read from the credential store and placed in the environment
-// to simulate the expected action runtime environment.
-async function ensureObjectStoreCredentials() {
-  const storeCreds = process.env.__NIM_STORAGE_KEY
-  let creds: Credentials
-  if (!storeCreds) {
-    debug('Objectstore credentials were not available, attempting to load from credential store')
-    creds = await getCredentials(authPersister) // will throw if no current namespace, that's ok
-    const storage = creds.storageKey
-    const provider = storage.provider || GCS_PROVIDER
-    if (provider === GCS_PROVIDER) {
-      // The local storage form for this provider differs from what needs to be in the environment (historical).
-      const { credentials, project_id } = storage
-      const { client_email, private_key } = credentials
-      process.env.__NIM_STORAGE_KEY = JSON.stringify({ client_email, private_key, project_id })
-    } else if (provider === S3_PROVIDER) {
-      // The S3 provider assumes what's in the environment === what would be stored.
-      process.env.__NIM_STORAGE_KEY = JSON.stringify(storage)
-    } else {
-      debug(`No support for storage provider '%s'`, provider)
-    }
-  }
-  const namespace = process.env.__OW_NAMESPACE || process.env.savedOW_NAMESPACE
-  const apiHost = process.env.__OW_API_HOST || process.env.savedOW_API_HOST
-  if (!namespace || !apiHost) {
-    debug('There was not enough information in the environment to determine the object store bucket name, attempting fix')
-    if (!creds) {
-      creds = await getCredentials(authPersister) // may throw, see above
-    }
-    process.env.__OW_NAMESPACE = creds.namespace
-    process.env.__OW_API_HOST = creds.ow.apihost
-  } else {
-    // Reset into normal variables in case they were in the backup variables
-    debug('Found namespace=%s and apiHost=%s', namespace, apiHost)
-    process.env.__OW_NAMESPACE = namespace
-    process.env.__OW_API_HOST = apiHost
-  }
+// Delete
+export async function deleteSlice(project: DeployStructure): Promise<void> {
+  const sliceName = path.relative(cacheArea(), project.filePath)
+  const url = await getUrl(sliceName, 'delete')
+  await axios.delete(url)    
 }
