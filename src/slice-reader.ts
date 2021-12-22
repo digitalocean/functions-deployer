@@ -19,11 +19,14 @@ import * as rimraf from 'rimraf'
 import { DeployStructure } from './deploy-struct'
 import { wskRequest } from './util'
 import axios from 'axios'
+import { authPersister, getCredentials } from './credentials'
 const debug = makeDebug('nim:deployer:slice-reader')
 const TEMP = process.platform === 'win32' ? process.env.TEMP : '/tmp'
-const SIGNED_URL = 'buildmgr/getSignedUrl'
 
-// Supports the fetching and deletion of project slices from the data bucket and related management functions
+// Supports the fetching and deletion of project slices from build bucket.
+// Uses the new getSignedUrl (web secure) function in buildmgr so that the
+// build bucket and data bucket may be different.  Not supported on clusters
+// in which the new action is not installed. 
 
 // Get the cache area
 function cacheArea() {
@@ -38,8 +41,9 @@ export async function fetchSlice(sliceName: string): Promise<string> {
   }
   debug('Making cache directory: %s', cache)
   fs.mkdirSync(cache, { recursive: true })
+  await ensureEnvironment()
   const url = await getUrl(sliceName, 'read')
-  const { data } = await axios.get(url)  
+  const { data } = await axios.get(url, { responseType: 'arraybuffer' })
   const zip = new Zip(data)
   debug('zip file has %d entries', zip.getEntries().length)
   for (const entry of zip.getEntries().filter(entry => !entry.isDirectory)) {
@@ -55,18 +59,31 @@ export async function fetchSlice(sliceName: string): Promise<string> {
   return cache
 }
 
+// Get a signed URL for reading or deleting the slice.
+// Because this usually executes in builder actions and not locally, the
+// credentials are not used but instead environment variables are expected
+// to provide the necessary information.
 async function getUrl(sliceName: string, action: string): Promise<string> {
   const bucket = process.env['BUILDER_BUCKET_NAME']
   const query = 'action=' + action +'&bucket=' + bucket + '&object=' + sliceName
   const reqUrl = process.env['__OW_API_HOST'] + '/api/v1/web/nimbella/buildmgr/getSignedUrl.json?' + query
-  console.log('Invoking url', reqUrl)
   const auth = process.env['__OW_API_KEY']
-  console.log('Using auth', auth)    
+  debug(`Invoking url '%s' using auth '%s'`, reqUrl, auth)    
   const invokeResponse = await wskRequest(reqUrl, auth)
-  console.log('Response:')
-  console.dir(invokeResponse, { depth: null })
+  debug('Response: %O', invokeResponse)
   const { url } = invokeResponse as any
   return url  
+}
+
+// For testing, where the environment is not primed but a credential store exists, prime the environment
+// Note: BUILDER_BUCKET_NAME _must_ be set in the environment.  That cannot be repaired here.
+async function ensureEnvironment() {
+    if (process.env['__OW_API_HOST'] && process.env['__OW_API_KEY']) {
+      return
+    }
+    const creds = await getCredentials(authPersister)
+    process.env['__OW_API_HOST'] = creds.ow.apihost
+    process.env['__OW_API_KEY'] = creds.ow.api_key
 }
 
 // Delete

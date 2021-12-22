@@ -696,7 +696,7 @@ export function getRemoteBuildName(): string {
 }
 
 // Invoke the remote build the traditional way, using the data bucket and assuming there are storage credentials
-async function legacyRemoteBuilder(zipped: Buffer, credentials: Credentials, owClient: openwhisk.Client, feedback: Feedback, runtimes: RuntimesConfig, action?: ActionSpec): Promise<string> {
+async function legacyRemoteBuilder(zipped: Buffer, owClient: openwhisk.Client, feedback: Feedback, runtimes: RuntimesConfig, action?: ActionSpec): Promise<string> {
   // Upload project slice to the user's data bucket
   const remoteName = getRemoteBuildName()
   const urlResponse = await owClient.actions.invoke({
@@ -742,7 +742,7 @@ async function invokeRemoteBuilder(zipped: Buffer, credentials: Credentials, owC
   if (credentials.storageKey) {
     // For now, we assume that if a storage key is present, then the data bucket should be used in the
     // traditional way.
-    return legacyRemoteBuilder(zipped, credentials, owClient, feedback, runtimes, action)
+    return legacyRemoteBuilder(zipped, owClient, feedback, runtimes, action)
   } // otherwise ...
   // Upload project slice to the specialized build bucket
   const uploadResponse = await owClient.actions.invoke({
