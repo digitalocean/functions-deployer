@@ -1246,6 +1246,12 @@ export async function waitForActivation(id: string, wsk: Client, waiting: () => 
   }
 }
 
+// Higher level wrapper around wskRequest for web-secure actions.  Forms the URL
+export function invokeWebSecure(actionAndQuery: string, auth: string, apihost: string): Promise<any> {
+  let url = apihost + '/api/v1/web' + actionAndQuery
+  return wskRequest(url, auth) 
+}
+
 // Subroutine to invoke OW with a GET and return the response.  Bypasses the OW client.  Used
 // to invoke web actions, with or without auth needed.
 export function wskRequest(url: string, auth: string = undefined): Promise<any> {
@@ -1269,8 +1275,13 @@ export function wskRequest(url: string, auth: string = undefined): Promise<any> 
       reject(new Error('Network error'))
     }
     if (auth) {
-      debug('Setting basic authorization header')
-      xhr.setRequestHeader('Authorization', 'Basic ' + Buffer.from(auth).toString('base64'))
+      if (auth.includes(':')) {
+        debug('Setting basic authorization header')
+        xhr.setRequestHeader('Authorization', 'Basic ' + Buffer.from(auth).toString('base64'))
+      } else {
+        debug('Setting X-Require-Whisk-Auth header to %s', auth)
+        xhr.setRequestHeader('X-Require-Whisk-Auth', auth)
+      }
     }
     xhr.send()
   })

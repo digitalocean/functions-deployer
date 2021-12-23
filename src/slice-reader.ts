@@ -17,11 +17,13 @@ import makeDebug from 'debug'
 import Zip from 'adm-zip'
 import * as rimraf from 'rimraf'
 import { DeployStructure } from './deploy-struct'
-import { wskRequest } from './util'
+import { invokeWebSecure } from './util'
+import { BUILDER_NAMESPACE } from './finder-builder' 
 import axios from 'axios'
 import { authPersister, getCredentials } from './credentials'
 const debug = makeDebug('nim:deployer:slice-reader')
 const TEMP = process.platform === 'win32' ? process.env.TEMP : '/tmp'
+const getSignedUrl = `/${BUILDER_NAMESPACE}/buildmgr/getSignedUrl.json`
 
 // Supports the fetching and deletion of project slices from build bucket.
 // Uses the new getSignedUrl (web secure) function in buildmgr so that the
@@ -41,7 +43,6 @@ export async function fetchSlice(sliceName: string): Promise<string> {
   }
   debug('Making cache directory: %s', cache)
   fs.mkdirSync(cache, { recursive: true })
-  await ensureEnvironment()
   const url = await getUrl(sliceName, 'read')
   const { data } = await axios.get(url, { responseType: 'arraybuffer' })
   const zip = new Zip(data)
@@ -60,30 +61,27 @@ export async function fetchSlice(sliceName: string): Promise<string> {
 }
 
 // Get a signed URL for reading or deleting the slice.
-// Because this usually executes in builder actions and not locally, the
-// credentials are not used but instead environment variables are expected
-// to provide the necessary information.
 async function getUrl(sliceName: string, action: string): Promise<string> {
-  const bucket = process.env['BUILDER_BUCKET_NAME']
-  const query = 'action=' + action +'&bucket=' + bucket + '&object=' + sliceName
-  const reqUrl = process.env['__OW_API_HOST'] + '/api/v1/web/nimbella/buildmgr/getSignedUrl.json?' + query
-  const auth = process.env['__OW_API_KEY']
-  debug(`Invoking url '%s' using auth '%s'`, reqUrl, auth)    
-  const invokeResponse = await wskRequest(reqUrl, auth)
+  const bucket = process.env.BUILDER_BUCKET_NAME
+  const actionAndQuery = getSignedUrl + '?action=' + action + '&bucket=' + bucket + '&object=' + sliceName
+  const apihost =  await getApiHost()
+  const auth = process.env.BUILDER_INTERNAL_KEY
+  debug(`Invoking with '%s', apihost= '%s', auth='%s'`, actionAndQuery, apihost, auth)
+  const invokeResponse = await invokeWebSecure(actionAndQuery, auth, apihost)
   debug('Response: %O', invokeResponse)
   const { url } = invokeResponse as any
   return url  
 }
 
-// For testing, where the environment is not primed but a credential store exists, prime the environment
-// Note: BUILDER_BUCKET_NAME _must_ be set in the environment.  That cannot be repaired here.
-async function ensureEnvironment() {
-    if (process.env['__OW_API_HOST'] && process.env['__OW_API_KEY']) {
-      return
+// Get the API host to use for secure web action invoke.  This will be in an environment
+// variable when running in an action (the usual case) or in the credential store (local replay).
+async function getApiHost(): Promise<string> {
+    const apihost = process.env.__OW_API_HOST || process.env.savedOW_API_HOST
+    if (apihost) {
+      return apihost
     }
     const creds = await getCredentials(authPersister)
-    process.env['__OW_API_HOST'] = creds.ow.apihost
-    process.env['__OW_API_KEY'] = creds.ow.api_key
+    return creds.ow.apihost
 }
 
 // Delete

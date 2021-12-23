@@ -16,7 +16,7 @@ import { DeployStructure, ActionSpec, PackageSpec, WebResource, BuildTable, Flag
   Credentials, Feedback } from './deploy-struct'
 import {
   actionFileToParts, filterFiles, mapPackages, mapActions, convertToResources, convertPairsToResources,
-  promiseFilesAndFilterFiles, agreeOnRuntime, getBestProjectName, getExclusionList
+  promiseFilesAndFilterFiles, agreeOnRuntime, getBestProjectName, getExclusionList, invokeWebSecure
 } from './util'
 import * as path from 'path'
 import * as fs from 'fs'
@@ -41,8 +41,9 @@ interface Ignore {
 }
 
 const ZIP_TARGET = '__deployer__.zip'
-const BUILDER_NAMESPACE = process.env['TEST_BUILDER_NAMESPACE'] || 'nimbella'
+export const BUILDER_NAMESPACE = process.env['TEST_BUILDER_NAMESPACE'] || 'nimbella'
 const BUILDER_ACTION_STEM = `/${BUILDER_NAMESPACE}/builder/build_`
+const GET_UPLOAD_URL = `/${BUILDER_NAMESPACE}/builder/getUploadUrl.json`
 const CANNED_REMOTE_BUILD = `#!/bin/bash
 /bin/defaultBuild
 `
@@ -743,16 +744,15 @@ async function invokeRemoteBuilder(zipped: Buffer, credentials: Credentials, owC
     // For now, we assume that if a storage key is present, then the data bucket should be used in the
     // traditional way.
     return legacyRemoteBuilder(zipped, owClient, feedback, runtimes, action)
-  } // otherwise ...
-  // Upload project slice to the specialized build bucket
-  const uploadResponse = await owClient.actions.invoke({
-    name: '/nimbella/builder/getUploadUrl',
-    blocking: true,
-    result: true
-  })
-  const { url, sliceName } = uploadResponse
+  } // otherwise, we follow the new path using a protected build bucket
+  // Upload project slice
+  const apihost = credentials.ow.apihost
+  const auth = credentials.ow.api_key
+  const uploadResponse = await invokeWebSecure(GET_UPLOAD_URL, auth, apihost)
+  const { url, sliceName, message } = uploadResponse
   if (!url || !sliceName) {
-    throw new Error(`Response from getUploadUrl was not as expected: ${uploadResponse}`)
+    const msg = message || `Unexpected response from getUploadUrl`
+    throw new Error(msg)
   }
   debug('remote build url is %s', url)
   const result = await axios.put(url, zipped)
