@@ -43,7 +43,7 @@ interface Ignore {
 const ZIP_TARGET = '__deployer__.zip'
 export const BUILDER_NAMESPACE = process.env['TEST_BUILDER_NAMESPACE'] || 'nimbella'
 const BUILDER_ACTION_STEM = `/${BUILDER_NAMESPACE}/builder/build_`
-const GET_UPLOAD_URL = `/${BUILDER_NAMESPACE}/builder/getUploadUrl.json`
+const GET_UPLOAD_URL = `/${BUILDER_NAMESPACE}/buildmgr/getUploadUrl.json`
 const CANNED_REMOTE_BUILD = `#!/bin/bash
 /bin/defaultBuild
 `
@@ -748,6 +748,7 @@ async function invokeRemoteBuilder(zipped: Buffer, credentials: Credentials, owC
   // Upload project slice
   const apihost = credentials.ow.apihost
   const auth = credentials.ow.api_key
+  debug(`Invoking '${GET_UPLOAD_URL}' with apihost '${apihost}' and auth '${auth}'`)
   const uploadResponse = await invokeWebSecure(GET_UPLOAD_URL, auth, apihost)
   const { url, sliceName, message } = uploadResponse
   if (!url || !sliceName) {

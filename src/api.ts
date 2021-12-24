@@ -48,6 +48,9 @@ export function initializeAPI(userAgent: string): {[key: string]: string} {
   if (result.__OW_API_HOST) {
     process.env.savedOW_API_HOST = result.__OW_API_HOST
   }
+  if (result.__OW_API_KEY) {
+    process.env.savedOW_API_KEY = result.__OW_API_KEY
+  }
   return result
 }
 

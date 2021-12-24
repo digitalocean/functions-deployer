@@ -16,7 +16,7 @@ import * as fs from 'fs'
 import makeDebug from 'debug'
 import Zip from 'adm-zip'
 import * as rimraf from 'rimraf'
-import { DeployStructure } from './deploy-struct'
+import { DeployStructure, OWOptions } from './deploy-struct'
 import { invokeWebSecure } from './util'
 import { BUILDER_NAMESPACE } from './finder-builder' 
 import axios from 'axios'
@@ -64,10 +64,9 @@ export async function fetchSlice(sliceName: string): Promise<string> {
 async function getUrl(sliceName: string, action: string): Promise<string> {
   const bucket = process.env.BUILDER_BUCKET_NAME
   const actionAndQuery = getSignedUrl + '?action=' + action + '&bucket=' + bucket + '&object=' + sliceName
-  const apihost =  await getApiHost()
-  const auth = process.env.BUILDER_INTERNAL_KEY
-  debug(`Invoking with '%s', apihost= '%s', auth='%s'`, actionAndQuery, apihost, auth)
-  const invokeResponse = await invokeWebSecure(actionAndQuery, auth, apihost)
+  const { apihost, api_key } = await getOpenWhiskCreds()
+  debug(`Invoking with '%s', apihost= '%s', auth='%s'`, actionAndQuery, apihost, api_key)
+  const invokeResponse = await invokeWebSecure(actionAndQuery, api_key, apihost)
   debug('Response: %O', invokeResponse)
   const { url } = invokeResponse as any
   return url  
@@ -75,13 +74,14 @@ async function getUrl(sliceName: string, action: string): Promise<string> {
 
 // Get the API host to use for secure web action invoke.  This will be in an environment
 // variable when running in an action (the usual case) or in the credential store (local replay).
-async function getApiHost(): Promise<string> {
+async function getOpenWhiskCreds(): Promise<OWOptions> {
     const apihost = process.env.__OW_API_HOST || process.env.savedOW_API_HOST
-    if (apihost) {
-      return apihost
+    const api_key = process.env.__OW_API_KEY || process.env.savedOW_API_KEY
+    if (apihost && api_key) {
+      return {apihost, api_key}
     }
-    const creds = await getCredentials(authPersister)
-    return creds.ow.apihost
+    const creds = await getCredentials(authPersister)  
+    return creds.ow
 }
 
 // Delete
