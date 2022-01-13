@@ -60,7 +60,7 @@ export async function loadProjectConfig(configFile: string, envPath: string, bui
   return reader.readFileContents(configFile).then(async data => {
     try {
       // Read the config, substituting from env
-      const content = substituteFromEnvAndFiles(String(data), envPath, filePath, feedback)
+      const { content, badVars } = substituteFromEnvAndFiles(String(data), envPath, filePath, feedback)
       let config: Record<string, any>
       if (configFile.endsWith('.json')) {
         config = JSON.parse(content)
@@ -82,6 +82,11 @@ export async function loadProjectConfig(configFile: string, envPath: string, bui
       if (buildEnvPath) {
         config.buildEnv = getPropsFromFile(buildEnvPath)
       }
+      config.unresolvedVariables = badVars
+      if (badVars && badVars.length > 0) {
+        const formatted = "'" + badVars.join("', '") + "'"
+        config.error =  new Error('The following substitutions could not be resolved: ' + formatted)
+      }
       return config
     } catch (err) {
       const errMsgPrefix = `Invalid project configuration file (${configFile})`
@@ -90,11 +95,7 @@ export async function loadProjectConfig(configFile: string, envPath: string, bui
       } else {
         err.message = `${errMsgPrefix}`
       }
-      const errans = errorStructure(err)
-      if (err.unresolved) {
-        errans.unresolvedVariables = err.unresolved
-      }
-      return errans
+      return errorStructure(err)
     }
   })
 }
@@ -763,7 +764,7 @@ async function promiseFilesRound(dir: string, files: string[], subdirs: string[]
 // The form ${ token1 token2 token3 } where tokens are non-whitespace separated by whitespace is a special shorthand
 // that expands to { token1: value, token2: value, token3: value } where the values are obtained by looking up the
 // tokens in the process environment (higher precedence) or property file located at 'envPath'.
-export function substituteFromEnvAndFiles(input: string, envPath: string, projectPath: string, feedback: Feedback): string {
+export function substituteFromEnvAndFiles(input: string, envPath: string, projectPath: string, feedback: Feedback): {content: string, badVars: string[]} {
   let result = '' // Will accumulate the result
   const badVars: string[] = [] // Will accumulate failures to resolve
   const props = envPath ? getPropsFromFile(envPath) : {}
@@ -795,23 +796,21 @@ export function substituteFromEnvAndFiles(input: string, envPath: string, projec
     }
     if (!subst) {
       badVars.push(envar)
-      subst = ''
+      subst = `<${envar}>`
     }
     debug('substitution is: %s', subst)
     result = result + before + subst
     input = after.substr(endVar + 1)
     nextSym = findNextSymbol(input)
   }
-  if (badVars.length > 0) {
-    const formatted = "'" + badVars.join("', '") + "'"
-    const toThrow =  new Error('The following substitutions could not be resolved: ' + formatted)
-    toThrow['unresolved'] = badVars
-    throw toThrow
-  }
+  result = result + input
   if (warn) {
     feedback.warn("Using '${}' for dictionary substitution is now deprecated; use '$()'")
   }
-  return result + input
+  if (badVars.length > 0) {
+    return { content: result, badVars } 
+  }
+  return { content: result, badVars: undefined }
 }
 
 // Scan forward for the next symbol introducer
@@ -845,6 +844,7 @@ function getDictionarySubstitution(tokens: string, props: Record<string, unknown
       ans[tok] = value
     } else {
       badVars.push(tok)
+      ans[tok] = `<${tok}>`
     }
   }
   return JSON.stringify(ans)
