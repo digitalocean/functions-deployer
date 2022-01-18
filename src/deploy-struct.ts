@@ -90,6 +90,7 @@ export interface Flags {
     include: string|undefined
     exclude: string|undefined
     remoteBuild: boolean
+    json: boolean
 }
 
 // Provides the status of a shared build
