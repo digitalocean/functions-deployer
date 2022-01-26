@@ -63,7 +63,8 @@ export async function fetchSlice(sliceName: string): Promise<string> {
 // Get a signed URL for reading or deleting the slice.
 async function getUrl(sliceName: string, action: string): Promise<string> {
   const bucket = process.env.BUILDER_BUCKET_NAME
-  const actionAndQuery = getSignedUrl + '?action=' + action + '&bucket=' + bucket + '&object=' + sliceName
+  const extraSecret = process.env.__NIM_REDIS_PASSWORD
+  const actionAndQuery = getSignedUrl + '?action=' + action + '&bucket=' + bucket + '&object=' + sliceName + '&extraSecret=' + extraSecret
   const { apihost, api_key } = await getOpenWhiskCreds()
   debug(`Invoking with '%s', apihost= '%s', auth='%s'`, actionAndQuery, apihost, api_key)
   const invokeResponse = await invokeWebSecure(actionAndQuery, api_key, apihost)
