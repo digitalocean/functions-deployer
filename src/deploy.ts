@@ -472,14 +472,15 @@ function encodeParameters(normalParms: openwhisk.Dict, envParms: openwhisk.Dict)
 
 // Construct the Action.Exec struct from the deployment configuration values.
 export function calculateActionExec(action: ActionSpec, code: string): Exec {
+  const main = action.main ? action.main : undefined // '' is falsey but won't be recognized as such by OW
   if (action.docker) {
-    return { code, binary: action.binary, kind: 'blackbox', image: action.docker, main: action.main }
+    return { code, binary: action.binary, kind: 'blackbox', image: action.docker, main }
   }
 
-  return { code, binary: action.binary, kind: action.runtime, main: action.main }
+  return { code, binary: action.binary, kind: action.runtime, main }
 }
 
-// Deploy an action when the code has already been read from a file or constructed programmatically or when the
+// Deploy an action when the code has already been read from a() file or constructed programmatically or when the
 // action is a sequence (Sequence passed in lieu of code).
 async function deployActionFromCodeOrSequence(action: ActionSpec, spec: DeployStructure,
   code: string, sequence: openwhisk.Sequence, pkgIsClean: boolean): Promise<DeployResponse> {
