@@ -1,6 +1,6 @@
 {
   "name": "@nimbella/nimbella-deployer",
-  "version": "3.1.11",
+  "version": "3.1.12",
   "description": "The Nimbella platform deployer library",
   "main": "lib/index.js",
   "repository": {
