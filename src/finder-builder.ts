@@ -770,7 +770,7 @@ async function invokeRemoteBuilder(zipped: Buffer, credentials: Credentials, owC
   debug(`Invoking remote build action '${buildActionName}' for build '${path.basename(sliceName)} of ${activityName}`)
   try {
     const invoked = await owClient.actions.invoke({ name: buildActionName, params: { toBuild: sliceName } })
-    feedback.progress(`Submitted ${activityName} for remote building and deployment in runtime ${kind}`)
+    feedback.progress(`Submitted ${activityName} for remote building and deployment in runtime ${kind} (id: ${invoked.activationId})`)
     return invoked.activationId
   } catch (err) {
     if (err.statusCode === 404) {
