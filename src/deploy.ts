@@ -255,6 +255,9 @@ export async function deployPackage(pkg: PackageSpec, spec: DeployStructure): Pr
     owClient: wsk, deployerAnnotation, flags
   } = spec
   if (pkg.name === 'default') {
+    if (isAtLeastOneNonEmpty([projectParams, projectEnv, pkg.parameters, pkg.environment])) {
+      return wrapError(new Error('The default package does not support attaching environment or parameters'), `package 'default'`)
+    }
     return deployActionArray(pkg.actions, spec, namespaceIsClean)
   }
   // Check whether the package metadata needs to be deployed; if so, deploy it.  If not, make a vacuous response with the existing package
@@ -291,6 +294,17 @@ export async function deployPackage(pkg: PackageSpec, spec: DeployStructure): Pr
   // Now deploy (or skip) the actions of the package
   const actionPromise = await deployActionArray(pkg.actions, spec, pkg.clean || namespaceIsClean)
   return combineResponses([actionPromise, pkgResponse])
+}
+
+// Test whether any object in an array of objects is non-empty.  Used here to check for illegal attachment of
+// parameters or environment to the 'default' package, which doesn't really exist.
+function isAtLeastOneNonEmpty(toCheck: object[]): boolean {
+  for (const source of toCheck) {
+    if (source && Object.keys(source).length > 0) {
+      return true
+    }
+  }
+  return false
 }
 
 // Deploy an action
