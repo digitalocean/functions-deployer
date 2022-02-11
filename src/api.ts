@@ -119,6 +119,12 @@ export async function readProject(projectPath: string, envPath: string, buildEnv
   } catch (err) {
     return errorStructure(err)
   }
+  if (ans.error) {
+    // Remaining steps are treacherous if there was an error detected in the config. We don't use the
+    // errorStructure return for that case, because we need to support get-metadata, which wants a config
+    // even if erroneous.  However, any other uses are going to fail.
+    return ans
+  }
   debug('evaluating the just-read project: %O', ans)
   let needsLocalBuilds: boolean
   try {
