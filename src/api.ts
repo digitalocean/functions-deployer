@@ -204,6 +204,11 @@ export async function prepareToDeploy(inputSpec: DeployStructure, owOptions: OWO
   if (inputSpec.slice) {
     debug('Retrieving credentials and flags from spec for slice')
     credentials = inputSpec.credentials
+    // The API host in the slice spec may represent a proxy and hence not be the real intended host.
+    // If __OW_API_HOST is set, it is more trustworthy.
+    if (process.env.__OW_API_HOST) {
+      credentials.ow.apihost = process.env.__OW_API_HOST
+    }
     flags = inputSpec.flags
   }
   // 1.  Acquire credentials if not already present
