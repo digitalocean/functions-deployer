@@ -208,6 +208,8 @@ export async function prepareToDeploy(inputSpec: DeployStructure, owOptions: OWO
     // If __OW_API_HOST is set, it is more trustworthy.
     if (process.env.__OW_API_HOST) {
       credentials.ow.apihost = process.env.__OW_API_HOST
+    } else if (process.env.savedOW_API_HOST) {
+      credentials.ow.apihost = process.env.savedOW_API_HOST
     }
     flags = inputSpec.flags
   }
