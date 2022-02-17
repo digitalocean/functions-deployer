@@ -248,26 +248,21 @@ async function deployActionArray(actions: ActionSpec[], spec: DeployStructure,
   return combineResponses(responses)
 }
 
-// Deploy a package, then deploy everything in it (currently just actions)
-export async function deployPackage(pkg: PackageSpec, spec: DeployStructure): Promise<DeployResponse> {
+// Subroutine to deploy just a package and not its actions.  Should only be called for
+// "deployable" packages (not the default package) and only when deployment of the package
+// is appropriate (not if the package has already been deployed or the context is a slice deploy).
+export async function onlyDeployPackage(pkg: PackageSpec, spec: DeployStructure): Promise<DeployResponse> {
   const {
     parameters: projectParams, environment: projectEnv, cleanNamespace: namespaceIsClean, versions,
-    owClient: wsk, deployerAnnotation, flags
+    owClient: wsk, deployerAnnotation: deployer, flags
   } = spec
-  if (pkg.name === 'default') {
-    if (isAtLeastOneNonEmpty([projectParams, projectEnv, pkg.parameters, pkg.environment])) {
-      return wrapError(new Error('The default package does not support attaching environment or parameters'), `package 'default'`)
-    }
-    return deployActionArray(pkg.actions, spec, namespaceIsClean)
-  }
   // Check whether the package metadata needs to be deployed; if so, deploy it.  If not, make a vacuous response with the existing package
   // VersionInfo.   That is needed so that the new versions.json will have the information in it.
-  let pkgResponse: DeployResponse
   const digest = digestPackage(pkg)
   if (flags.incremental && versions.packageVersions && versions.packageVersions[pkg.name] && digest === versions.packageVersions[pkg.name].digest) {
     const packageVersions = {}
     packageVersions[pkg.name] = versions.packageVersions[pkg.name]
-    pkgResponse = { successes: [], failures: [], ignored: [], packageVersions, actionVersions: {}, namespace: undefined }
+    return { successes: [], failures: [], ignored: [], packageVersions, actionVersions: {}, namespace: undefined }
   } else {
     let former: openwhisk.Package
     if (!pkg.clean && !namespaceIsClean) {
@@ -275,7 +270,6 @@ export async function deployPackage(pkg: PackageSpec, spec: DeployStructure): Pr
     }
     const oldAnnots = former && former.annotations ? makeDict(former.annotations) : {}
     delete oldAnnots.deployerAnnot // remove unwanted legacy from undetected earlier error
-    const deployer = deployerAnnotation
     deployer.digest = digest.substring(0, 8)
     const annotDict = Object.assign({}, oldAnnots, pkg.annotations, { deployer })
     const annotations = keyVal(annotDict)
@@ -283,14 +277,29 @@ export async function deployPackage(pkg: PackageSpec, spec: DeployStructure): Pr
     const mergedEnv = Object.assign({}, projectEnv, pkg.environment)
     const params = encodeParameters(mergedParams, mergedEnv)
     const owPkg: openwhisk.Package = { parameters: params, annotations, publish: pkg.shared }
-    await wsk.packages.update({ name: pkg.name, package: owPkg }).then(result => {
+    return await wsk.packages.update({ name: pkg.name, package: owPkg }).then(result => {
       const packageVersions = {}
       packageVersions[pkg.name] = { version: result.version, digest }
-      pkgResponse = { successes: [], failures: [], ignored: [], packageVersions, actionVersions: {}, namespace: result.namespace }
+      return { successes: [], failures: [], ignored: [], packageVersions, actionVersions: {}, namespace: result.namespace }
     }).catch(err => {
-      pkgResponse = wrapError(err, `package '${pkg.name}'`)
+      return wrapError(err, `package '${pkg.name}'`)
     })
   }
+}
+
+// Deploy a package, then deploy everything in it (currently just actions)
+export async function deployPackage(pkg: PackageSpec, spec: DeployStructure): Promise<DeployResponse> {
+  const {
+    parameters: projectParams, environment: projectEnv, cleanNamespace: namespaceIsClean, slice
+  } = spec
+  if (pkg.name === 'default' && isAtLeastOneNonEmpty([projectParams, projectEnv, 
+      pkg.parameters, pkg.environment, pkg.annotations])) {
+      return wrapError(new Error('The default package does not support attaching environment or parameters'), `package 'default'`)
+  }
+  if (pkg.name === 'default' || slice || pkg.deployedDuringBuild) {
+    return deployActionArray(pkg.actions, spec, namespaceIsClean)
+  }
+  const pkgResponse = await onlyDeployPackage(pkg, spec)
   // Now deploy (or skip) the actions of the package
   const actionPromise = await deployActionArray(pkg.actions, spec, pkg.clean || namespaceIsClean)
   return combineResponses([actionPromise, pkgResponse])

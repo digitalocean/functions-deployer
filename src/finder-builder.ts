@@ -31,6 +31,7 @@ import { Writable } from 'stream'
 import * as memoryStreams from 'memory-streams'
 import openwhisk = require('openwhisk')
 import { RuntimesConfig, canonicalRuntime } from './runtimes'
+import { onlyDeployPackage } from './deploy'
 
 const debug = makeDebug('nim:deployer:finder-builder')
 const zipDebug = makeDebug('nim:deployer:zip')
@@ -85,6 +86,16 @@ export function buildAllActions(spec: DeployStructure, runtimes: RuntimesConfig)
 
 // Build the actions of a package, returning an updated PackageSpec or undefined if nothing got built
 async function buildActionsOfPackage(pkg: PackageSpec, spec: DeployStructure, runtimes: RuntimesConfig): Promise<PackageSpec> {
+  // Determine if any remote builds exist in this package.  If so, we have to deploy the package before doing the builds.
+  let mustDeployPackage = pkg.actions?.some(action => action.build === 'remote' || action.build === 'remote-default')
+  if (mustDeployPackage) {
+    const pkgResult = await onlyDeployPackage(pkg, spec)
+    if (pkgResult.failures.length > 0) {
+      throw pkgResult.failures[0]
+    }
+    pkg.deployedDuringBuild = true
+  }  
+  // Now run all the builds in this package  
   const actionMap = mapActions(pkg.actions)
   let nobuilds = true
   for (const action of pkg.actions) {

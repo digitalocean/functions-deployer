@@ -44,6 +44,7 @@ export interface PackageSpec {
     environment?: Dict // Bound parameters for all actions in the package, destined to go in the environment of each action
     clean?: boolean // Indicates that the package is to be deleted (with its contained actions) before deployment
     web?: any // like 'web' on an action but affects all actions of the package that don't redeclare the flag
+    deployedDuringBuild?: boolean // set when the package was deployed early because some builds were remote
 }
 
 // Describes one action

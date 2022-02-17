@@ -302,7 +302,7 @@ export function validateDeployConfig(arg: any, runtimesConfig: RuntimesConfig): 
           return 'packages member must be an array'
         }
         for (const subitem of arg[item]) {
-          const pkgError = validatePackageSpec(subitem, runtimesConfig)
+          const pkgError = validatePackageSpec(subitem, runtimesConfig, slice)
           if (pkgError) {
             return pkgError
           }
@@ -407,7 +407,7 @@ function validateWebResource(arg: Record<string, any>): string {
 }
 
 // Validator for a PackageSpec
-function validatePackageSpec(arg: Record<string, any>, runtimesConfig: RuntimesConfig): string {
+function validatePackageSpec(arg: Record<string, any>, runtimesConfig: RuntimesConfig, slice: boolean): string {
   const isDefault = arg.name === 'default'
   for (const item in arg) {
     if (!arg[item]) continue
@@ -447,6 +447,8 @@ function validatePackageSpec(arg: Record<string, any>, runtimesConfig: RuntimesC
       if (isDefault && Object.keys(arg[item]).length > 0) {
         return `'${item}' must be absent or empty for the default package`
       }
+    } else if (item === 'deployedDuringBuild' && slice) {
+      continue
     } else {
       return `Invalid key '${item}' found in 'package' in project.yml`
     }
