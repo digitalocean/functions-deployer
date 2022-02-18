@@ -86,7 +86,9 @@ export async function doDeploy(todeploy: DeployStructure): Promise<DeployRespons
   } else {
     webResults = await deployAllWebResources(todeploy, webLocal)
   }
-  const actionPromises = todeploy.packages.map(pkg => deployPackage(pkg, todeploy))
+  const skipPkgDeploy = todeploy.slice && todeploy.deployerAnnotation.newSliceHandling
+  delete todeploy.deployerAnnotation.newSliceHandling
+  const actionPromises = todeploy.packages.map(pkg => deployPackage(pkg, todeploy, skipPkgDeploy))
   const responses: DeployResponse[] = webResults.concat(await Promise.all(actionPromises))
   responses.push(straysToResponse(todeploy.strays))
   const sequenceResponses = await deploySequences(todeploy)
@@ -288,15 +290,15 @@ export async function onlyDeployPackage(pkg: PackageSpec, spec: DeployStructure)
 }
 
 // Deploy a package, then deploy everything in it (currently just actions)
-export async function deployPackage(pkg: PackageSpec, spec: DeployStructure): Promise<DeployResponse> {
+export async function deployPackage(pkg: PackageSpec, spec: DeployStructure, skipPkgDeploy: boolean): Promise<DeployResponse> {
   const {
-    parameters: projectParams, environment: projectEnv, cleanNamespace: namespaceIsClean, slice
+    parameters: projectParams, environment: projectEnv, cleanNamespace: namespaceIsClean
   } = spec
   if (pkg.name === 'default' && isAtLeastOneNonEmpty([projectParams, projectEnv, 
       pkg.parameters, pkg.environment, pkg.annotations])) {
       return wrapError(new Error('The default package does not support attaching environment or parameters'), `package 'default'`)
   }
-  if (pkg.name === 'default' || slice || pkg.deployedDuringBuild) {
+  if (pkg.name === 'default' || skipPkgDeploy) {
     return deployActionArray(pkg.actions, spec, namespaceIsClean)
   }
   const pkgResponse = await onlyDeployPackage(pkg, spec)

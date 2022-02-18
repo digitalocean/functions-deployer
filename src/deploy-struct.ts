@@ -251,6 +251,7 @@ export interface DeployerAnnotation {
     projectPath: string
     user: string
     zipped?: boolean
+    newSliceHandling?: boolean
 }
 
 // Grouping for OW Options that can be specified on the command line or by caller; also part of credential lookup response

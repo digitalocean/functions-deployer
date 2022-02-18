@@ -94,6 +94,7 @@ async function buildActionsOfPackage(pkg: PackageSpec, spec: DeployStructure, ru
       throw pkgResult.failures[0]
     }
     pkg.deployedDuringBuild = true
+    spec.deployerAnnotation.newSliceHandling = true
   }  
   // Now run all the builds in this package  
   const actionMap = mapActions(pkg.actions)
@@ -633,6 +634,7 @@ function makeConfigFromActionSpec(action: ActionSpec, spec: DeployStructure, pkg
   removeUndefined(newAction)
   const pkg = spec.packages.find(pkg => pkg.name === pkgName)
   pkg.actions = [newAction]
+  pkg.deployedDuringBuild = false
   newSpec.packages = [pkg]
   return newSpec
 }
