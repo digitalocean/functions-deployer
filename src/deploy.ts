@@ -298,7 +298,7 @@ export async function deployPackage(pkg: PackageSpec, spec: DeployStructure, ski
       pkg.parameters, pkg.environment, pkg.annotations])) {
       return wrapError(new Error('The default package does not support attaching environment or parameters'), `package 'default'`)
   }
-  if (pkg.name === 'default' || skipPkgDeploy) {
+  if (pkg.name === 'default' || skipPkgDeploy || pkg.deployedDuringBuild) {
     return deployActionArray(pkg.actions, spec, namespaceIsClean)
   }
   const pkgResponse = await onlyDeployPackage(pkg, spec)

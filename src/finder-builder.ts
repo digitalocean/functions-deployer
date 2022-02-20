@@ -632,7 +632,7 @@ function makeConfigFromActionSpec(action: ActionSpec, spec: DeployStructure, pkg
   } as ActionSpec
   removeUndefined(newSpec)
   removeUndefined(newAction)
-  const pkg = spec.packages.find(pkg => pkg.name === pkgName)
+  const pkg = Object.assign({}, spec.packages.find(pkg => pkg.name === pkgName))
   pkg.actions = [newAction]
   pkg.deployedDuringBuild = false
   newSpec.packages = [pkg]
