@@ -86,9 +86,25 @@ export function fileExtensionForRuntime(runtime: RuntimeKind, isBinaryExtension:
 // Does the runtime kind exist in the platform config?
 export function isValidRuntime(runtimes: RuntimesConfig, kind: RuntimeKind): boolean {
   debug_log(`isValidRuntime: runtimes (${runtimes}) kind (${kind})`)
-  const [_, version] = kind.split(':')
-  //const images = runtimes[label] ?? []
-  return Object.values(runtimes).some(images => images.some(i => version === 'default' ? i.default : i.kind === kind))
+  let exactMatch = true
+  if (kind.endsWith(':default')) {
+    kind = kind.split(':')[0] + ':'
+    exactMatch = false
+  }
+  debug_log('searching')
+  for (const runtimeArray of Object.values(runtimes)) {
+    for (const runtime of runtimeArray) {
+      if (exactMatch && kind === runtime.kind) {
+        debug_log(`${kind}===${runtime.kind}`)
+        return true
+      } else if (!exactMatch && runtime.kind.startsWith(kind) && runtime.default) {
+        debug_log(`${runtime.kind} starts with ${kind} and is the default`)
+        return true
+      }
+      debug_log(`no match on ${runtime.kind}`)
+    }
+  }
+  return false
 }
 
 // Find the default runtime for a language

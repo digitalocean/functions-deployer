@@ -135,7 +135,7 @@ describe('test checking valid runtimes', () => {
   test('should find valid runtimes with default version', () => {
     const runtimes: RuntimesConfig = {
       nodejs: [{ "kind": "nodejs:10", default: true }],
-      python: [{ "kind": "python-ai:10", default: true }]
+      python: [{ "kind": "python:10", default: true }]
     }
     expect(isValidRuntime(runtimes, 'nodejs:default')).toEqual(true)
     expect(isValidRuntime(runtimes, 'python:default')).toEqual(true)
