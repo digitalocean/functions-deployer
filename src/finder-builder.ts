@@ -184,11 +184,14 @@ function makeLocal(reader: ProjectReader, ...paths: string[]): string {
 async function processIncludeFileItems(items: string[], dirPath: string, reader: ProjectReader): Promise<string[][]> {
   const complex: Promise<string[][]>[] = []
   const simple: string[][] = []
-  for (const item of items) {
+  for (let item of items) {
     if (!item || item.length === 0) {
       continue
     }
     debug('processing include item %s', item)
+    if (item.startsWith('./') || item.startsWith('.\\')) {
+      item = item.slice(2)
+    }
     let oldPath = path.isAbsolute(item) ? item : joinAndNormalize(dirPath, item)
     if (oldPath.endsWith('/') || oldPath.endsWith('\\')) {
       oldPath = oldPath.slice(0, -1)
