@@ -1078,8 +1078,10 @@ export function digestPackage(pkg: PackageSpec): string {
   const hash = crypto.createHash('sha256')
   digestBoolean(hash, pkg.shared)
   digestBoolean(hash, pkg.clean)
+  digestBoolean(hash, pkg.web)
   digestDictionary(hash, pkg.annotations)
   digestDictionary(hash, pkg.parameters)
+  digestDictionary(hash, pkg.environment)
   for (const action of pkg.actions || []) {
     hash.update(action.name)
   }
@@ -1088,6 +1090,14 @@ export function digestPackage(pkg: PackageSpec): string {
 
 function digestBoolean(hash: crypto.Hash, toDigest: boolean) {
   hash.update(String(!!toDigest))
+}
+
+function digestStringArray(hash: crypto.Hash, toDigest: string[]) {
+  if (toDigest) {
+    for (const value of toDigest) {
+      hash.update(value) 
+    }
+  }
 }
 
 function digestDictionary(hash: crypto.Hash, toDigest: Record<string, any>) {
@@ -1124,7 +1134,9 @@ export function digestAction(action: ActionSpec, code: string): string {
   hash.update(String(action.webSecure))
   digestDictionary(hash, action.annotations)
   digestDictionary(hash, action.parameters)
+  digestDictionary(hash, action.environment)
   digestDictionary(hash, action.limits)
+  digestStringArray(hash, action.sequence)  
   hash.update(code)
   if (action.main) {
     hash.update(action.main)
