@@ -87,7 +87,7 @@ export function buildAllActions(spec: DeployStructure, runtimes: RuntimesConfig)
 // Build the actions of a package, returning an updated PackageSpec or undefined if nothing got built
 async function buildActionsOfPackage(pkg: PackageSpec, spec: DeployStructure, runtimes: RuntimesConfig): Promise<PackageSpec> {
   // Determine if any remote builds exist in this package.  If so, we have to deploy the package before doing the builds.
-  let mustDeployPackage = pkg.actions?.some(action => action.build === 'remote' || action.build === 'remote-default')
+  let mustDeployPackage = pkg.name !== 'default' && pkg.actions?.some(action => action.build === 'remote' || action.build === 'remote-default')
   if (mustDeployPackage) {
     const pkgResult = await onlyDeployPackage(pkg, spec)
     if (pkgResult.failures.length > 0) {
