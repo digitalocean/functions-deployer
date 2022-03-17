@@ -156,12 +156,19 @@ function buildAction(action: ActionSpec, spec: DeployStructure, runtimes: Runtim
 }
 
 // Process .include file by reading it, recognize any .. or absolute path references, expanding directories, and filtering the result.
+// Absolute path references are illegal.  References to ../../../lib/* are allowed, otherwise, references outside the build directory
+// are illegal.
 // Returns a list of pairs.  In each pair, the first member is the path of a file to be included.  The second member is its name the file
-// should assume once included.  For simple cases (files and directories that are inside the directory that contains the .include) these
-// will be the same.  For complex cases (absolute paths or .. directives) they will differ.
-function processInclude(includesPath: string, dirPath: string, reader: ProjectReader): Promise<string[][]> {
+// should assume once included.  Except for ../../../lib/* cases, these will be the same.  In the latter case, the dirname portion of the
+// path is elided inside the zip file.
+async function processInclude(includesPath: string, dirPath: string, reader: ProjectReader, web: boolean): Promise<string[][]> {
   debug("processing includes from '%s'", includesPath)
-  return readFileAsList(includesPath, reader).then(items => processIncludeFileItems(items, dirPath, reader))
+  const items = await readFileAsList(includesPath, reader)
+  const errMsg = checkIncludeItems(items, web)
+  if (errMsg) {
+    return Promise.reject(new Error(errMsg))
+  }
+  return processIncludeFileItems(items, dirPath, reader)
 }
 
 // Used instead of path.resolve to deal with possible '..' directives.  We don't want absolute path names
@@ -185,27 +192,22 @@ async function processIncludeFileItems(items: string[], dirPath: string, reader:
   const complex: Promise<string[][]>[] = []
   const simple: string[][] = []
   for (let item of items) {
-    if (!item || item.length === 0) {
-      continue
-    }
     debug('processing include item %s', item)
     if (item.startsWith('./') || item.startsWith('.\\')) {
       item = item.slice(2)
     }
-    let oldPath = path.isAbsolute(item) ? item : joinAndNormalize(dirPath, item)
+    let oldPath = path.join(dirPath, item)
     if (oldPath.endsWith('/') || oldPath.endsWith('\\')) {
       oldPath = oldPath.slice(0, -1)
     }
-    // TODO note that if the path actually is absolute it won't work when deploying from github
-    // The little hack here keeps it working for the local case.
     debug("Calculated oldPath '%s'", oldPath)
     const lstat: PathKind = await reader.getPathKind(oldPath)
     if (!lstat) {
       return Promise.reject(new Error(`${oldPath} is included for '${dirPath}' but does not exist`))
     }
     let newPath: string
-    const mightBeOutside = item.includes('..') || path.isAbsolute(item)
-    if (mightBeOutside) {
+    if (item.includes('..')) {
+      // Already screened for legality
       newPath = path.basename(item)
     } else {
       newPath = item
@@ -236,7 +238,7 @@ async function identifyActionFiles(action: ActionSpec, incremental: boolean, ver
   }
   if (await reader.isExistingFile(includesPath)) {
     // If there is .include or .source, it is canonical and all else is ignored
-    return processInclude(includesPath, action.file, reader).then(pairs => {
+    return processInclude(includesPath, action.file, reader, false).then(pairs => {
       if (pairs.length === 0) {
         return Promise.reject(new Error(includesPath + ' is empty'))
       } else if (pairs.length > 1) {
@@ -460,7 +462,7 @@ async function identifyWebFiles(filepath: string, reader: ProjectReader): Promis
   if (await reader.isExistingFile(includesPath)) {
     // If there is .include, it defines what to include and we need not look elsewhere
     debug('processing .include')
-    return processInclude(includesPath, filepath, reader).then(pairs => convertPairsToResources(pairs))
+    return processInclude(includesPath, filepath, reader, true).then(pairs => convertPairsToResources(pairs))
   }
   debug('Processing web files using .ignore')
   // Otherwise, we take the contents modulo the ignores
@@ -485,9 +487,26 @@ function checkForNodeModules(items: string[]) {
   })
 }
 
-// Check the basic pre-reqs for doing a remote build.  There must be storage credentials (indicating that the namespace has a data bucket).
-// And, there cannot be an `.include` entry that is absolute or has a `../` directive.
-async function checkRemoteBuildPreReqs(filepath: string, project: DeployStructure) {
+// Check that all include file items resolve to "legal" places (inside the directory being built or a 'lib' directory at project root)
+// Returns an error message if an illegal item is found, else the empty string.
+function checkIncludeItems(items: string[], web: boolean): string {
+  const legalDots = web ? '../lib' : '../../../lib'
+  for (const item of items) {
+    if (!item || item.length === 0) {
+      continue
+    }
+    if (path.isAbsolute(item)) {
+      return `Absolute paths are prohibited in an '.include' file`
+    }
+    if (item.includes('..') && !item.startsWith(legalDots)) {
+      return `Illegal use of '..' in an '.include' file`
+    }
+  }
+}
+
+// Check the .include file, if any, for illegal inclusions.   This permits
+// a "fail-fast" for remote builds that are going to fail anyway.
+async function checkRemoteBuildPreReqs(filepath: string, project: DeployStructure, web: boolean) {
   debug(`checking remote build pre-reqs for '${filepath}'`)
   const reader = project.reader
   if ((await reader.getPathKind(filepath)).isDirectory) {
@@ -496,12 +515,10 @@ async function checkRemoteBuildPreReqs(filepath: string, project: DeployStructur
       debug(`found an .include file for '${filepath}'`)
       const items = await readFileAsList(include, reader)
       debug(`read ${items.length} .include items for '${filepath}'`)
-      items.forEach(item => {
-        if (item.includes('..') || path.isAbsolute(item)) {
-          debug('found illegal item')
-          throw new Error(`Remote build not possible for '${filepath}': included item '${item}' is outside the built directory`)
-        }
-      })
+      const msg = checkIncludeItems(items, web)
+      if (msg) {
+        throw new Error(msg)
+      }
     }
   }
 }
@@ -509,7 +526,7 @@ async function checkRemoteBuildPreReqs(filepath: string, project: DeployStructur
 // Initiate request to builder for building an action
 async function doRemoteActionBuild(action: ActionSpec, project: DeployStructure, runtimes: RuntimesConfig): Promise<ActionSpec> {
   // Check that a remote build is supportable
-  await checkRemoteBuildPreReqs(action.file, project)
+  await checkRemoteBuildPreReqs(action.file, project, false)
   // Get the zipper
   const { zip, output, outputPromise } = makeProjectSliceZip(action.file)
   // Get the project slice in convenient form
@@ -593,7 +610,7 @@ async function appendAndCheck(zip: archiver.Archiver, file: string, actionPath: 
 // Initiate request to builder for building web content
 async function doRemoteWebBuild(project: DeployStructure, runtimes: RuntimesConfig) {
   // Check that a remote build is supportable
-  await checkRemoteBuildPreReqs('web', project)
+  await checkRemoteBuildPreReqs('web', project, true)
   // Get the zipper
   const { zip, output, outputPromise } = makeProjectSliceZip('web content')
   // Get the project slice in convenient form
