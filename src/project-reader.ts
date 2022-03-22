@@ -15,8 +15,9 @@ import * as path from 'path'
 import * as fs from 'fs'
 import { getUserAgent } from './api'
 import { DeployStructure, PackageSpec, ActionSpec, WebResource, Includer, ProjectReader, PathKind, Feedback } from './deploy-struct'
-import { emptyStructure, actionFileToParts, filterFiles, convertToResources, promiseFilesAndFilterFiles, loadProjectConfig, errorStructure, getDeployerAnnotation, getBestProjectName } from './util'
-import { getBuildForAction, getBuildForWeb } from './finder-builder'
+import { emptyStructure, actionFileToParts, filterFiles, convertToResources, promiseFilesAndFilterFiles, 
+  loadProjectConfig, errorStructure, getDeployerAnnotation, getBestProjectName, isRealBuild } from './util'
+import { getBuildForAction, getBuildForLibOrWeb } from './finder-builder'
 import { isGithubRef, parseGithubRef, fetchProject } from './github'
 import makeDebug from 'debug'
 import { makeFileReader } from './file-reader'
@@ -32,6 +33,7 @@ const ENV_FILE = '.env'
 // Read the top level files and dirs of the project.  Only one file and two dirs are legal at this level; everything else is a 'stray'
 interface TopLevel {
     web: string
+    lib: string
     packages: string
     config?: string
     env?: string
@@ -83,7 +85,7 @@ export async function readTopLevel(filePath: string, env: string, buildEnv: stri
     }
     reader = makeFileReader(filePath)
   }
-  const webDir = 'web'; const pkgDir = 'packages'
+  const webDir = 'web'; const pkgDir = 'packages'; const libDir = 'lib'
   return reader.readdir('').then(items => {
     items = filterFiles(items)
     let web: string
@@ -92,6 +94,7 @@ export async function readTopLevel(filePath: string, env: string, buildEnv: stri
     let legacyConfig: string
     let packages: string
     const strays: string[] = []
+    let lib: string
     for (const item of items) {
       if (item.isDirectory) {
         switch (item.name) {
@@ -100,6 +103,9 @@ export async function readTopLevel(filePath: string, env: string, buildEnv: stri
           break
         case pkgDir:
           packages = pkgDir
+          break
+        case libDir:
+          lib = libDir
           break
         case '.nimbella':
           break
@@ -130,7 +136,7 @@ export async function readTopLevel(filePath: string, env: string, buildEnv: stri
       debug('github path was %s', githubPath)
       debug('filePath is %s', filePath)
     }
-    const ans = { web, packages, config, strays, filePath, env, buildEnv, githubPath, includer, reader, feedback }
+    const ans = { web, lib, packages, config, strays, filePath, env, buildEnv, githubPath, includer, reader, feedback }
     debug('readTopLevel returning %O', ans)
     return ans
   })
@@ -139,14 +145,18 @@ export async function readTopLevel(filePath: string, env: string, buildEnv: stri
 // Probe the top level structure to obtain the major parts of the final config.  Spawn builders for those parts and
 // assemble a "Promise.all" for the combined work
 export async function buildStructureParts(topLevel: TopLevel, runtimes: RuntimesConfig): Promise<DeployStructure[]> {
-  const { web, packages, config, strays, filePath, env, buildEnv, githubPath, includer, reader, feedback } = topLevel
+  const { web, lib, packages, config, strays, filePath, env, buildEnv, githubPath, includer, reader, feedback } = topLevel
   let configPart = await readConfig(config, env, buildEnv, filePath, includer, reader, feedback, runtimes)
   const deployerAnnotation = configPart.deployerAnnotation || await getDeployerAnnotation(filePath, githubPath)
   configPart = Object.assign(configPart, { strays, filePath, githubPath, includer, reader, feedback, deployerAnnotation })
   const displayName = getBestProjectName(configPart)
   debug('display path for actions is %O', displayName)
-  const webPart = await getBuildForWeb(web, reader).then(build => buildWebPart(web, build, reader))
+  const webPart = await getBuildForLibOrWeb(web, reader, false).then(build => buildWebPart(web, build, reader))
   const actionsPart = await buildActionsPart(packages, displayName, includer, reader, runtimes)
+  configPart.libBuild = await getBuildForLibOrWeb(lib, reader, true)
+  if (!isRealBuild(configPart.libBuild)) {
+    configPart.libBuild = undefined
+  }
   return [webPart, actionsPart, configPart]
 }
 

@@ -101,7 +101,7 @@ export async function loadProjectConfig(configFile: string, envPath: string, bui
 }
 
 // Check whether a build field actually implies a build must be run
-function isRealBuild(buildField: string): boolean {
+export function isRealBuild(buildField: string): boolean {
   switch (buildField) {
     case 'build.sh':
     case 'build.cmd':

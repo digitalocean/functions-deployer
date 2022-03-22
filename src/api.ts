@@ -21,7 +21,7 @@ import {
   checkBuildingRequirements, errorStructure, getBestProjectName, inBrowser
 } from './util'
 import { openBucketClient } from './deploy-to-bucket'
-import { buildAllActions, buildWeb } from './finder-builder'
+import { buildAllActions, buildWeb, maybeBuildLib } from './finder-builder'
 import openwhisk = require('openwhisk')
 import { getCredentialsForNamespace, getCredentials, Persister, recordNamespaceOwnership } from './credentials'
 import { makeIncluder } from './includer'
@@ -149,11 +149,23 @@ export async function readProject(projectPath: string, envPath: string, buildEnv
   return ans
 }
 
-// 'Build' the project by running the "finder builder" steps in each action-as-directory and in the web directory
+// 'Build' the project by running the "finder builder" steps in
+// 1.  the 'lib' directory if found and if building it is appropriate
+// 2.  each action-as-directory
+// 3.  the 'web' directory if found
+// Steps 2 and 3 can be done in parallel but step 1 must complete before the
+// others are started.
 export async function buildProject(project: DeployStructure, runtimes: RuntimesConfig): Promise<DeployStructure> {
   debug('Starting buildProject with spec %O', project)
   let webPromise: Promise<WebResource[]|Error>
   project.sharedBuilds = { }
+  if (project.libBuild) {
+    try {
+      await maybeBuildLib(project)
+    } catch (err) {
+      return errorStructure(err)
+    }
+  }
   if (project.webBuild) {
     webPromise = buildWeb(project, runtimes).catch(err => Promise.resolve(err))
   }

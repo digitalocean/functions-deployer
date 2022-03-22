@@ -51,7 +51,7 @@ const CANNED_REMOTE_BUILD = `#!/bin/bash
 
 // Determine the build type for an action that is defined as a directory
 export function getBuildForAction(filepath: string, reader: ProjectReader): Promise<string> {
-  return readDirectory(filepath, reader).then(items => findSpecialFile(items, filepath, true))
+  return readDirectory(filepath, reader).then(items => findSpecialFile(items, filepath, true, false))
 }
 
 // Build all the actions in an array of PackageSpecs, returning a new array of PackageSpecs.  We try to return
@@ -308,7 +308,7 @@ function outOfLineBuilder(filepath: string, displayPath: string, sharedBuilds: B
     } else if (stat.isDirectory) {
       // Look in the directory to find build to run
       return readDirectory(redirected, reader).then(items => {
-        const special = findSpecialFile(items, filepath, isAction)
+        const special = findSpecialFile(items, filepath, isAction, false)
         let build: () => Promise<any>
         const cwd = makeLocal(reader, redirected)
         switch (special) {
@@ -394,12 +394,57 @@ function isSharedBuild(items: PathKind[]): boolean {
   return shared
 }
 
-// Determine the build step for the web directory or return undefined if there isn't one
-export function getBuildForWeb(filepath: string, reader: ProjectReader): Promise<string> {
+// Determine the build step for the lib or web directory or return undefined if there isn't one
+export function getBuildForLibOrWeb(filepath: string, reader: ProjectReader, lib: boolean): Promise<string> {
   if (!filepath) {
     return Promise.resolve(undefined)
   }
-  return readDirectory(filepath, reader).then(items => findSpecialFile(items, filepath, false))
+  return readDirectory(filepath, reader).then(items => findSpecialFile(items, filepath, false, lib))
+}
+
+// Build the lib directory only if appropriate.  It is appropriate to build it
+// if (1) we are deploying a slice ("already running remotely") or (2) there is
+// some action (or web content) that will be deployed locally.  In other words,
+// we do _not_ build lib in the case where this deployment is running locally but
+// everything will in fact be deployed remotely.
+export async function maybeBuildLib(spec: DeployStructure): Promise<void> {
+  function isRemote(build: string): boolean {
+    return build === 'remote' || build === 'remote-default'
+  }
+  let shouldBuild = spec.slice || (spec.webBuild && !isRemote(spec.webBuild))
+  if (!shouldBuild && spec.packages) {
+    pkgLoop: for (const pkg of spec.packages) {
+      if (pkg.actions) {
+        for (const action of pkg.actions) {
+          shouldBuild = action.build && !isRemote(action.build)
+          if (shouldBuild) {
+            break pkgLoop
+          }
+        }
+      }
+    }
+  }
+  if (shouldBuild) {
+    let scriptPath: string
+    const displayPath = path.join(getBestProjectName(spec), 'lib')
+    const { reader, flags, feedback, sharedBuilds, slice, buildEnv } = spec
+    switch (spec.libBuild) {
+      case 'build.sh':
+        scriptPath = makeLocal(reader, 'lib')
+        return scriptBuilder('./build.sh', scriptPath, displayPath, flags, buildEnv, slice, feedback)
+      case 'build.cmd':
+        scriptPath = makeLocal(reader, 'lib')
+        return scriptBuilder('build.cmd', scriptPath, displayPath, flags, buildEnv, slice, feedback)
+      case '.build':
+        // Does its own localizing
+        return outOfLineBuilder('lib', displayPath, sharedBuilds, false, flags, buildEnv, slice, reader, feedback)
+      case 'package.json':
+        scriptPath = makeLocal(reader, 'lib')
+        return npmBuilder(scriptPath, displayPath, flags, buildEnv, slice, feedback)
+      default:
+        throw new Error('Unknown or inappropriate build type for lib directory: ' + spec.libBuild)
+    }
+  }
 }
 
 export function buildWeb(spec: DeployStructure, runtimes: RuntimesConfig): Promise<WebResource[]> {
@@ -489,7 +534,7 @@ function checkForNodeModules(items: string[]) {
 
 // Check that all include file items resolve to "legal" places (inside the directory being built or a 'lib' directory at project root)
 // Returns an error message if an illegal item is found, else the empty string.
-function checkIncludeItems(items: string[], web: boolean): string {
+export function checkIncludeItems(items: string[], web: boolean): string {
   const legalDots = web ? '../lib' : '../../../lib'
   for (const item of items) {
     if (!item || item.length === 0) {
@@ -502,6 +547,7 @@ function checkIncludeItems(items: string[], web: boolean): string {
       return `Illegal use of '..' in an '.include' file`
     }
   }
+  return ""
 }
 
 // Check the .include file, if any, for illegal inclusions.   This permits
@@ -541,6 +587,10 @@ async function doRemoteActionBuild(action: ActionSpec, project: DeployStructure,
     }
     debug('Setting runtime to %s for remote build', runtime)
     action.runtime = runtime
+  }
+  // Add 'lib' if it is present
+  if (project.libBuild) {
+    await appendLibToZip(zip, 'lib', project.reader)
   }
   // Add the project.yml
   const spec = makeConfigFromActionSpec(action, project, pkgName)
@@ -594,6 +644,15 @@ async function appendToZip(zip: archiver.Archiver, actionPath: string, reader: P
   return agreeOnRuntime(analyzeForRuntime, runtimes)
 }
 
+// A simplified version of appendToZip for adding secondary directories (currently 'lib') to the slice
+async function appendLibToZip(zip: archiver.Archiver, path: string, reader: ProjectReader) {
+    zipDebug('getting contents of directory %s for remote build slice', path)
+    const files = await promiseFilesAndFilterFiles(path, reader)
+    for (const file of files) {
+      await appendAndCheck(zip, file, path, reader)
+    }
+}
+
 // Append a path known to be a file to the in-memory zip, checking for excessive size and issuing debug if requested.
 async function appendAndCheck(zip: archiver.Archiver, file: string, actionPath: string, reader: ProjectReader) {
   const contents = await reader.readFileContents(file)
@@ -617,6 +676,10 @@ async function doRemoteWebBuild(project: DeployStructure, runtimes: RuntimesConf
   const spec = makeConfigFromWebSpec(project)
   // Zip the web path
   await appendToZip(zip, 'web', project.reader, '', runtimes)
+  // Add 'lib' if it is present
+  if (project.libBuild) {
+    await appendLibToZip(zip, 'lib', project.reader)
+  }
   // Add the project.yml
   const config = yaml.safeDump(spec)
   zip.append(config, { name: 'project.yml' })
@@ -821,7 +884,7 @@ function readDirectory(filepath: string, reader: ProjectReader): Promise<PathKin
   return reader.readdir(filepath).then(filterFiles)
 }
 
-// Find the "dominant" special file in a collection of files within an action or web directory, while checking for some errors
+// Find the "dominant" special file in a collection of files within an action, web, or lib directory, while checking for some errors
 // The dominance order is build.[sh|cmd] > .build > package.json > .include > none-of-these (returns 'identify' since 'building' will
 //   then start by identifying files)
 // Errors detected are:
@@ -830,7 +893,8 @@ function readDirectory(filepath: string, reader: ProjectReader): Promise<PathKin
 //    build.cmd but no build.sh on a macos or linux system
 //    .ignore when there is also .include
 //    no files in directory (or only an .ignore file); actions only (web directory is permitted to be empty)
-function findSpecialFile(items: PathKind[], filepath: string, isAction: boolean): string {
+//    in a 'lib' directory .include, .ignore, and .build are illegal
+function findSpecialFile(items: PathKind[], filepath: string, isAction: boolean, isLib: boolean): string {
   const files = items.filter(item => !item.isDirectory)
   let buildDotSh = false; let buildDotCmd = false; let npm = false; let include = false; let dotBuild = false; let ignore = false
   for (const file of files) {
@@ -855,6 +919,8 @@ function findSpecialFile(items: PathKind[], filepath: string, isAction: boolean)
     throw new Error(`In ${filepath}: '.include' (or '.source') and '.ignore' may not both be present`)
   } else if (isAction && (files.length === 0 || (ignore && files.length === 1))) {
     throw new Error(`Action directory ${filepath} has no files`)
+  } else if (isLib && (include || ignore || dotBuild)) {
+    throw new Error(`'.include', '.ignore', and '.build' are not supported in the 'lib' directory`)
   }
   if (process.platform === 'win32') {
     if (buildDotSh && !buildDotCmd) {
@@ -895,7 +961,7 @@ function singleFileBuilder(action: ActionSpec, file: string, runtimes: RuntimesC
 // 2.  If there is a runtime provided in the ActionSpec we leave it there.  Otherwise, we scan the files to see if we
 //     can decide on an unambiguous runtime value.  If we can't, it's an error.
 // 3.  Use archiver to zip the items individually, according to the rules that
-//     - an item is renamed to the basename of the item if it contains .. or is an absolute path
+//     - an item is renamed to the basename of the item if it contains ..
 //     - an item is zipped as is otherwise
 //     - directories are zipped recursively
 // 4.  Return an ActionSpec promise describing the result.

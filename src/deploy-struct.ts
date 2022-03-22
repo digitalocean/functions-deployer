@@ -146,6 +146,7 @@ export interface DeployStructure {
     buildEnv?: Record<string,string> // Build time environment
     // The following fields are never permitted in project.yml but are always added internally
     webBuild?: string // Type of build (build.sh or package.json) to apply to the web directory
+    libBuild?: string // Type of build (build.sh or package.json) to apply to the lib directory
     sharedBuilds?: BuildTable // The build table for this project, populated as shared builds are initiated
     strays?: string[] // files or directories found in the project that don't fit the model, not necessarily an error
     filePath?: string // The location of the project on disk
