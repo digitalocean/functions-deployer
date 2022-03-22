@@ -21,7 +21,7 @@ import { Client, Dict, Activation } from 'openwhisk'
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
-import simplegit from 'simple-git/promise'
+import simplegit from 'simple-git'
 import * as mime from 'mime-types'
 import * as mimedb from 'mime-db'
 import * as randomstring from 'randomstring'
@@ -982,7 +982,7 @@ export async function getDeployerAnnotation(project: string, githubPath: string)
   }
   const digest = undefined
   try {
-    const git = simplegit().silent(true)
+    const git = simplegit()
     const root = await git.revparse(['--show-toplevel'])
     const repo = await git.raw(['config', '--get', 'remote.origin.url'])
     const user = (await git.raw(['config', '--get', 'user.email'])).trim()
