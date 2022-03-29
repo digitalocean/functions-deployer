@@ -46,6 +46,7 @@ export const BUILDER_NAMESPACE = process.env['TEST_BUILDER_NAMESPACE'] || 'nimbe
 const BUILDER_ACTION_STEM = `/${BUILDER_NAMESPACE}/builder/build_`
 const GET_UPLOAD_URL = `/${BUILDER_NAMESPACE}/buildmgr/getUploadUrl.json`
 const CANNED_REMOTE_BUILD = `#!/bin/bash
+set -e
 /bin/defaultBuild
 `
 
