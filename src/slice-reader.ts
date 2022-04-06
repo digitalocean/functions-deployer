@@ -16,23 +16,51 @@ import * as fs from 'fs'
 import makeDebug from 'debug'
 import Zip from 'adm-zip'
 import * as rimraf from 'rimraf'
-import { DeployStructure, OWOptions } from './deploy-struct'
-import { invokeWebSecure } from './util'
-import { BUILDER_NAMESPACE } from './finder-builder' 
-import axios from 'axios'
-import { authPersister, getCredentials } from './credentials'
+import { DeployStructure } from './deploy-struct'
+import { S3Client, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { Readable, Writable } from 'stream'
+import { WritableStream } from 'memory-streams'
+
 const debug = makeDebug('nim:deployer:slice-reader')
 const TEMP = process.platform === 'win32' ? process.env.TEMP : '/tmp'
-const getSignedUrl = `/${BUILDER_NAMESPACE}/buildmgr/getSignedUrl.json`
+const bucket = process.env.BUILDER_BUCKET_NAME
+const endpoint = process.env.S3_ENDPOINT
+// Environment must also contain AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
+
+let s3Client: S3Client
 
 // Supports the fetching and deletion of project slices from build bucket.
-// Uses the new getSignedUrl (web secure) function in buildmgr so that the
-// build bucket and data bucket may be different.  Not supported on clusters
-// in which the new action is not installed. 
+// Uses the aws s3 client directly (does not go through the Nimbella storage
+// abstraction).  Assumes the necessary s3 properties are in the environment.
+// This will not work on older clusters (e.g `nimgcp`) where the use of a data
+// bucket associated with the namespace is assumed.  A nim CLI < 2.0.0 must be
+// used for those clusters.
 
 // Get the cache area
 function cacheArea() {
   return path.join(TEMP, 'slices')
+}
+
+// Get the s3 client
+function getS3Client(): S3Client {
+  if (!s3Client) {
+    s3Client = new S3Client({ endpoint, region: "us-east-1" })
+  }
+  return s3Client
+}
+
+// Pipe data from one stream to another
+function pipe(input: Readable, output: Writable): Promise<unknown> {
+  const toWait = new Promise(function(resolve) {
+    output.on('close', () => {
+      resolve(true)
+    })
+    output.on('finish', () => {
+      resolve(true)
+    })
+  })
+  input.pipe(output)
+  return toWait
 }
 
 // Fetch the slice to cache storage.
@@ -43,8 +71,13 @@ export async function fetchSlice(sliceName: string): Promise<string> {
   }
   debug('Making cache directory: %s', cache)
   fs.mkdirSync(cache, { recursive: true })
-  const url = await getUrl(sliceName, 'read')
-  const { data } = await axios.get(url, { responseType: 'arraybuffer' })
+  const s3 = getS3Client()
+  const cmd = new GetObjectCommand({ Bucket: bucket, Key: sliceName })
+  const result = await s3.send(cmd)
+  const content = result.Body as Readable // Body has type ReadableStream<any>|Readable|Blob.  Readable seems to work in practice
+  const destination = new WritableStream({ highWaterMark: 1024 * 1024 })
+  await pipe(content, destination)
+  const data = (destination as WritableStream).toBuffer()
   const zip = new Zip(data)
   debug('zip file has %d entries', zip.getEntries().length)
   for (const entry of zip.getEntries().filter(entry => !entry.isDirectory)) {
@@ -60,34 +93,10 @@ export async function fetchSlice(sliceName: string): Promise<string> {
   return cache
 }
 
-// Get a signed URL for reading or deleting the slice.
-async function getUrl(sliceName: string, action: string): Promise<string> {
-  const bucket = process.env.BUILDER_BUCKET_NAME
-  const extraSecret = process.env.__NIM_REDIS_PASSWORD
-  const actionAndQuery = getSignedUrl + '?action=' + action + '&bucket=' + bucket + '&object=' + sliceName + '&extraSecret=' + extraSecret
-  const { apihost, api_key } = await getOpenWhiskCreds()
-  debug(`Invoking with '%s', apihost= '%s', auth='%s'`, actionAndQuery, apihost, api_key)
-  const invokeResponse = await invokeWebSecure(actionAndQuery, api_key, apihost)
-  debug('Response: %O', invokeResponse)
-  const { url } = invokeResponse as any
-  return url  
-}
-
-// Get the API host to use for secure web action invoke.  This will be in an environment
-// variable when running in an action (the usual case) or in the credential store (local replay).
-async function getOpenWhiskCreds(): Promise<OWOptions> {
-    const apihost = process.env.__OW_API_HOST || process.env.savedOW_API_HOST
-    const api_key = process.env.__OW_API_KEY || process.env.savedOW_API_KEY
-    if (apihost && api_key) {
-      return {apihost, api_key}
-    }
-    const creds = await getCredentials(authPersister)  
-    return creds.ow
-}
-
 // Delete
 export async function deleteSlice(project: DeployStructure): Promise<void> {
   const sliceName = path.relative(cacheArea(), project.filePath)
-  const url = await getUrl(sliceName, 'delete')
-  await axios.delete(url)    
+  const s3 = getS3Client()
+  const cmd = new DeleteObjectCommand({ Bucket: bucket, Key: sliceName })
+  await s3.send(cmd)
 }

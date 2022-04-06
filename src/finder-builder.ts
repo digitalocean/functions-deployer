@@ -16,7 +16,7 @@ import { DeployStructure, ActionSpec, PackageSpec, WebResource, BuildTable, Flag
   Credentials, Feedback } from './deploy-struct'
 import {
   actionFileToParts, filterFiles, mapPackages, mapActions, convertToResources, convertPairsToResources,
-  promiseFilesAndFilterFiles, agreeOnRuntime, getBestProjectName, getExclusionList, invokeWebSecure
+  promiseFilesAndFilterFiles, agreeOnRuntime, getBestProjectName, getExclusionList
 } from './util'
 import * as path from 'path'
 import * as fs from 'fs'
@@ -44,7 +44,7 @@ interface Ignore {
 const ZIP_TARGET = '__deployer__.zip'
 export const BUILDER_NAMESPACE = process.env['TEST_BUILDER_NAMESPACE'] || 'nimbella'
 const BUILDER_ACTION_STEM = `/${BUILDER_NAMESPACE}/builder/build_`
-const GET_UPLOAD_URL = `/${BUILDER_NAMESPACE}/buildmgr/getUploadUrl.json`
+const GET_UPLOAD_URL = `/${BUILDER_NAMESPACE}/builder/getUploadUrl`
 const CANNED_REMOTE_BUILD = `#!/bin/bash
 set -e
 /bin/defaultBuild
@@ -835,6 +835,19 @@ async function legacyRemoteBuilder(zipped: Buffer, owClient: openwhisk.Client, f
   }
 }
 
+// Computes the tag to be added to a remote build slice name.  Should be a function of the
+// qualified action name (pkg/action) but with / replaced by _.  Also, if there is no
+// action spec we assume this is a remote web build and use the string 'web'
+function computeTag(action: ActionSpec): string {
+  if (!action) {
+    return 'web'
+  }
+  if (action.package) {
+    return `${action.package}_${action.name}`
+  }
+  return action.name
+}
+
 // Invoke the remote builder, return the response.  The 'action' argument is omitted for web builds
 async function invokeRemoteBuilder(zipped: Buffer, credentials: Credentials, owClient: openwhisk.Client, feedback: Feedback, runtimes: RuntimesConfig, action?: ActionSpec): Promise<string> {
   if (credentials.storageKey) {
@@ -843,13 +856,14 @@ async function invokeRemoteBuilder(zipped: Buffer, credentials: Credentials, owC
     return legacyRemoteBuilder(zipped, owClient, feedback, runtimes, action)
   } // otherwise, we follow the new path using a protected build bucket
   // Upload project slice
-  const apihost = credentials.ow.apihost
-  const auth = credentials.ow.api_key
-  debug(`Invoking '${GET_UPLOAD_URL}' with apihost '${apihost}' and auth '${auth}'`)
-  const uploadResponse = await invokeWebSecure(GET_UPLOAD_URL, auth, apihost)
-  const { url, sliceName, message } = uploadResponse
+  const params = { action: computeTag(action) }
+  debug(`Invoking 'getUploadUrl'`)
+  // The following should eventually be invoked asynchronously and then polled for completion to deal with the
+  // possibility of being locked out of the invoker pool long enough for the controller to disconnect.
+  const uploadResponse = await owClient.actions.invoke({ name: GET_UPLOAD_URL, blocking: true, result: true, params })
+  const { url, sliceName } = uploadResponse
   if (!url || !sliceName) {
-    const msg = message || `Unexpected response from getUploadUrl`
+    const msg = `Unexpected response from getUploadUrl`
     throw new Error(msg)
   }
   debug('remote build url is %s', url)
