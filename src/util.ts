@@ -113,11 +113,20 @@ export function isRealBuild(buildField: string): boolean {
   }
 }
 
-// Replace a build field with 'remote' if it is supposed to be remote according to flags, directives, environment
-function locateBuild(buildField: string, remoteRequested: boolean, remoteRequired: boolean, localRequired: boolean) {
-  if (isRealBuild(buildField) && (inBrowser || remoteRequired || (remoteRequested && !localRequired))) {
+// Replace a build field with 'remote' or 'remote-default' if it is supposed to be remote according to flags,
+// directives, environment, or the type of runtime.
+function locateBuild(buildField: string, remoteRequested: boolean, defaultRemote: boolean,
+  remoteRequired: boolean, localRequired: boolean) {
+  if (!isRealBuild(buildField)) {
+    // Not a real build. Check remote-default conditions.
+    if (defaultRemote && !localRequired) {
+      return 'remote-default'
+    } // else does not meet remote-default conditions
+    return buildField
+  } // else it's a real build. Check conditions for remote.
+  if (inBrowser || remoteRequired || (remoteRequested && !localRequired)) {
     return 'remote'
-  }
+  } // else does not meet conditions for remote
   return buildField
 }
 
@@ -147,20 +156,15 @@ export async function checkBuildingRequirements(todeploy: DeployStructure, reque
     }
   }
   const webRequiresLocal = (todeploy.bucket && todeploy.bucket.localBuild) || !!todeploy.actionWrapPackage
-  todeploy.webBuild = locateBuild(todeploy.webBuild, requestRemote, todeploy.bucket && todeploy.bucket.remoteBuild, webRequiresLocal)
+  todeploy.webBuild = locateBuild(todeploy.webBuild, requestRemote, false, todeploy.bucket && todeploy.bucket.remoteBuild, webRequiresLocal)
   let needsLocal = todeploy.webBuild !== 'remote' && isRealBuild(todeploy.webBuild)
   if (todeploy.packages) {
     for (const pkg of todeploy.packages) {
       if (pkg.actions) {
         for (const action of pkg.actions) {
-          action.build = locateBuild(action.build, requestRemote, action.remoteBuild, action.localBuild)
-          if (requestRemote && action.build !== 'remote') {
-            if (await hasDefaultRemote(action, todeploy.reader, runtimes)) {
-              action.build = 'remote-default'
-              continue // does not effect needsLocal
-            }
-          }
-          needsLocal = needsLocal || (action.build !== 'remote' && isRealBuild(action.build))
+          const defaultRemote = await hasDefaultRemote(action, todeploy.reader, runtimes)
+          action.build = locateBuild(action.build, requestRemote, defaultRemote, action.remoteBuild, action.localBuild)
+          needsLocal = needsLocal || (!action.build?.startsWith('remote') && isRealBuild(action.build))
         }
       }
     }
@@ -173,7 +177,7 @@ export async function checkBuildingRequirements(todeploy: DeployStructure, reque
 // known so it is prepared to peek into the project to figure out the operative runtime.
 async function hasDefaultRemote(action: ActionSpec, reader: ProjectReader, runtimes: RuntimesConfig): Promise<boolean> {
   const runtime = await getRuntimeForAction(action, reader, runtimes)
-  if (runtime === '') {
+  if (!runtime) {
     return false 
   }
   const kind = runtime.split(':')[0]
@@ -191,6 +195,9 @@ export async function getRuntimeForAction(action: ActionSpec, reader: ProjectRea
   if (action.runtime) {
     return action.runtime
   }
+  if (action.sequence && action.sequence.length > 0) {
+    return ''
+  }
   const pathKind = await reader.getPathKind(action.file)
   if (pathKind.isFile) {
     let runtime: string
@@ -200,7 +207,7 @@ export async function getRuntimeForAction(action: ActionSpec, reader: ProjectRea
     const files = await promiseFilesAndFilterFiles(action.file, reader)
     return agreeOnRuntime(files, runtimes)
   } else {
-    return ""
+    return ''
   }
 }
 
