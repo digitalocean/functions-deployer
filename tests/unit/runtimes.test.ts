@@ -1,6 +1,6 @@
 import { fromPlatform, API_ENDPOINT, RuntimesConfig, runtimeForFileExtension, isBinaryFileExtension, fileExtensionForRuntime, runtimeForZipMid, canonicalRuntime, isValidRuntime, defaultRuntime } from '../../src/runtimes'
 import axios from 'axios'
-import { mocked } from 'ts-jest/utils'
+import { mocked } from 'jest-mock'
 
 jest.mock('axios')
 
