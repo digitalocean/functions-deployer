@@ -657,7 +657,16 @@ async function appendLibToZip(zip: archiver.Archiver, path: string, reader: Proj
 // Append a path known to be a file to the in-memory zip, checking for excessive size and issuing debug if requested.
 async function appendAndCheck(zip: archiver.Archiver, file: string, actionPath: string, reader: ProjectReader) {
   const contents = await reader.readFileContents(file)
-  const mode = (await reader.getPathKind(file)).mode
+  let mode: number
+  if (file.endsWith('.sh') && process.platform === 'win32') {
+    // This is a weak heuristic to be around the fact that there is no executable bit on windows,
+    // which can cause remote builds with shell scripts to fail.  It might still be necessary for
+    // a windows user to understand the issue and fix up permissions on things that don't end in .sh but
+    // that really are scripts (this can be done in the primary script build.sh).
+    mode = 0o777
+  } else {
+    mode = (await reader.getPathKind(file)).mode
+  }
   debug(`mode for ${file} is ${mode}`)
   zip.append(contents, { name: file, mode })
   const size = zip.pointer()
