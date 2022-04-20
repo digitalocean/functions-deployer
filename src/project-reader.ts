@@ -154,9 +154,6 @@ export async function buildStructureParts(topLevel: TopLevel, runtimes: Runtimes
   const webPart = await getBuildForLibOrWeb(web, reader, false).then(build => buildWebPart(web, build, reader))
   const actionsPart = await buildActionsPart(packages, displayName, includer, reader, runtimes)
   configPart.libBuild = await getBuildForLibOrWeb(lib, reader, true)
-  if (!isRealBuild(configPart.libBuild)) {
-    configPart.libBuild = undefined
-  }
   return [webPart, actionsPart, configPart]
 }
 

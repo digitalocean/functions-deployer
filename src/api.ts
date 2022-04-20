@@ -18,7 +18,7 @@ import { DeployStructure, DeployResponse, PackageSpec, OWOptions, WebResource, C
 import { readTopLevel, buildStructureParts, assembleInitialStructure } from './project-reader'
 import {
   isTargetNamespaceValid, wrapError, wipe, saveUsFromOurselves, writeProjectStatus, getTargetNamespace,
-  checkBuildingRequirements, errorStructure, getBestProjectName, inBrowser
+  checkBuildingRequirements, errorStructure, getBestProjectName, inBrowser, isRealBuild
 } from './util'
 import { openBucketClient } from './deploy-to-bucket'
 import { buildAllActions, buildWeb, maybeBuildLib } from './finder-builder'
@@ -159,7 +159,7 @@ export async function buildProject(project: DeployStructure, runtimes: RuntimesC
   debug('Starting buildProject with spec %O', project)
   let webPromise: Promise<WebResource[]|Error>
   project.sharedBuilds = { }
-  if (project.libBuild) {
+  if (project.libBuild && isRealBuild(project.libBuild)) {
     try {
       await maybeBuildLib(project)
     } catch (err) {
