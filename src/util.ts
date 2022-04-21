@@ -1245,10 +1245,14 @@ export function delay(millis: number): Promise<void> {
   })
 }
 
-// Await the completion of an action invoke (similar to kui's await)
-export async function waitForActivation(id: string, wsk: Client, waiting: () => void): Promise<Activation<Dict>> {
+// Await the completion of an action invoke.  The poll interval is fixed at 1 second.
+// The 'waiting' argument is called every 10 polls (intended for providing progress feedback).
+// The total wait time should be expressed in #polls.  Because of imprecision in the time
+// management this will generally be longer than #seconds but not by a huge factor.
+// If the wait "times out", undefined is returned.
+export async function waitForActivation(id: string, wsk: Client, waiting: () => void, total: number): Promise<Activation<Dict>> {
   debug(`waiting for activation with id ${id}`)
-  for (let i = 1 ;; i++) {
+  for (let i = 1 ;i <= total; i++) {
     try {
       const activation = await wsk.activations.get(id)
       if (activation.end || activation.response.status) {
@@ -1265,6 +1269,7 @@ export async function waitForActivation(id: string, wsk: Client, waiting: () => 
     }
     await delay(1000)
   }
+  return undefined
 }
 
 // Higher level wrapper around wskRequest for web-secure actions.  Forms the URL

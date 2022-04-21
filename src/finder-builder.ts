@@ -16,7 +16,7 @@ import { DeployStructure, ActionSpec, PackageSpec, WebResource, BuildTable, Flag
   Credentials, Feedback } from './deploy-struct'
 import {
   actionFileToParts, filterFiles, mapPackages, mapActions, convertToResources, convertPairsToResources,
-  promiseFilesAndFilterFiles, agreeOnRuntime, getBestProjectName, getExclusionList
+  promiseFilesAndFilterFiles, agreeOnRuntime, getBestProjectName, getExclusionList, waitForActivation
 } from './util'
 import * as path from 'path'
 import * as fs from 'fs'
@@ -47,7 +47,7 @@ const BUILDER_ACTION_STEM = `/${BUILDER_NAMESPACE}/builder/build_`
 const GET_UPLOAD_URL = `/${BUILDER_NAMESPACE}/builder/getUploadUrl`
 const CANNED_REMOTE_BUILD = `#!/bin/bash
 set -e
-/bin/defaultBuild
+/bin/defaultBuild %MAIN%
 `
 
 // Determine the build type for an action that is defined as a directory
@@ -581,7 +581,8 @@ async function doRemoteActionBuild(action: ActionSpec, project: DeployStructure,
   const actionName = pkgName === 'default' ? action.name : path.join(pkgName, action.name)
   // Zip the actionPath, also determining runtime if the action spec doesn't already have one
   debug('zipping action path %s for project slice', action.file)
-  const runtime = await appendToZip(zip, action.file, project.reader, action.build === 'remote-default' ? action.name : '', runtimes)
+  const generateRemote = defaultRemote(action)
+  const runtime = await appendToZip(zip, action.file, project.reader, generateRemote, runtimes)
   if (!action.runtime) {
     if (!runtime) {
       throw new Error(`Could not determine runtime for remote build of '${actionName}'.  You may need to specify it in 'project.yml'`)
@@ -609,11 +610,29 @@ async function doRemoteActionBuild(action: ActionSpec, project: DeployStructure,
   return action
 }
 
+// Information about a default remote build
+interface DefaultRemoteBuildInfo {
+  contents: string    // The contents of the generated build.sh
+  actionName: string  // the name of the action, used to generate intra-slice paths
+}
+
+// Generate DefaultRemoteBuildInfo from ActionSpec iff appropriate, else undefined
+function defaultRemote(action: ActionSpec): DefaultRemoteBuildInfo {
+  if (action.build && action.build === 'remote-default') {
+    const main = action.main || 'Main'
+    const contents = CANNED_REMOTE_BUILD.replace('%MAIN%', main)
+    const actionName = action.name
+    return { contents, actionName }
+  }
+  return undefined
+}
+
 // Zip a file or directory for a remote build slice.  For actions, also attempts to determine a runtime.
 // For web builds, the returned 'runtime' is irrelevant and can be ignored.  If the generateBuild argument
-// is non-empty it provides the action directory name and indicates that we should add a two-line `build.sh`.
+// is defined, it provides the action directory name and indicates that we should add a two-line `build.sh`.
 // This may require changing the single-file case to a multi-file case.
-async function appendToZip(zip: archiver.Archiver, actionPath: string, reader: ProjectReader, generateBuild: string, runtimes: RuntimesConfig): Promise<string> {
+async function appendToZip(zip: archiver.Archiver, actionPath: string, reader: ProjectReader,
+    generateBuild: DefaultRemoteBuildInfo|undefined, runtimes: RuntimesConfig): Promise<string> {
   const kind = await reader.getPathKind(actionPath)
   let analyzeForRuntime: string[]
   if (kind.isFile) {
@@ -621,11 +640,11 @@ async function appendToZip(zip: archiver.Archiver, actionPath: string, reader: P
       // Change to multi-file case, although there is still only one source file
       const parent = path.dirname(actionPath)
       const simpleFile = path.basename(actionPath)
-      const name = path.join(parent, generateBuild, simpleFile)
+      const name = path.join(parent, generateBuild.actionName, simpleFile)
       const contents = await reader.readFileContents(actionPath)
       zip.append(contents, { name, mode: 0o666 })
-      const buildFile = path.join(parent, generateBuild, 'build.sh')
-      zip.append(CANNED_REMOTE_BUILD, { name: buildFile, mode: 0o777 })
+      const buildFile = path.join(parent, generateBuild.actionName, 'build.sh')
+      zip.append(generateBuild.contents, { name: buildFile, mode: 0o777 })
     } else {
       await appendAndCheck(zip, actionPath, actionPath, reader)
     }
@@ -639,7 +658,7 @@ async function appendToZip(zip: archiver.Archiver, actionPath: string, reader: P
     }
     if (generateBuild) {
       const buildFile = path.join(actionPath, 'build.sh')
-      zip.append(CANNED_REMOTE_BUILD, { name: buildFile, mode: 0o777 })
+      zip.append(generateBuild.contents, { name: buildFile, mode: 0o777 })
     }
   }
   return agreeOnRuntime(analyzeForRuntime, runtimes)
@@ -685,7 +704,7 @@ async function doRemoteWebBuild(project: DeployStructure, runtimes: RuntimesConf
   // Get the project slice in convenient form
   const spec = makeConfigFromWebSpec(project)
   // Zip the web path
-  await appendToZip(zip, 'web', project.reader, '', runtimes)
+  await appendToZip(zip, 'web', project.reader, undefined, runtimes)
   // Add 'lib' if it is present
   if (project.libBuild) {
     await appendLibToZip(zip, 'lib', project.reader)
@@ -857,6 +876,39 @@ function computeTag(action: ActionSpec): string {
   return action.name
 }
 
+// Expected return value from getUploadUrl
+interface UploadInfo {
+  url: string
+  sliceName: string
+}
+
+// This function simulates a blocking invoke of the builder/getUploadUrl action without actually
+// blocking at the controller.  It does a non-blocking invoke, then polls the returned activation Id.
+// Note: errors thrown by the original invoke or during polling will not be caught here. They are intended
+// to be caught in buildProject, which will handle them appropriately.
+async function getUploadUrl(owClient: openwhisk.Client, params: { action: string }, feedback: Feedback): Promise<UploadInfo> {
+  const invoked = await owClient.actions.invoke({ name: GET_UPLOAD_URL, params })
+  const tick = () => feedback.progress(`Waiting for permission to upload remote build for '${params.action}'`)
+  const activation = await waitForActivation(invoked.activationId, owClient, tick, 2*60)
+  if (!activation) {
+    throw new Error(`Timed out awaiting permission to upload remote build for '${params.action}'`)
+  }
+  if (!activation.response || !activation.response.success) {
+    let err = 'Failed to get remote build upload permission'
+    const resultError = activation?.response?.result?.error
+    if (resultError) {
+      const errMsg = typeof resultError === 'string' ? resultError : resultError.message
+      if (typeof errMsg === 'string') {
+        const parts = errMsg.split("Error:")
+        err = parts[parts.length - 1]
+      }
+    }
+    throw new Error(err)
+  }
+  const result = activation.response.result as Record<string, any>
+  return { url: result.url, sliceName: result.sliceName }
+}
+ 
 // Invoke the remote builder, return the response.  The 'action' argument is omitted for web builds
 async function invokeRemoteBuilder(zipped: Buffer, credentials: Credentials, owClient: openwhisk.Client, feedback: Feedback, runtimes: RuntimesConfig, action?: ActionSpec): Promise<string> {
   if (credentials.storageKey) {
@@ -867,10 +919,7 @@ async function invokeRemoteBuilder(zipped: Buffer, credentials: Credentials, owC
   // Upload project slice
   const params = { action: computeTag(action) }
   debug(`Invoking 'getUploadUrl'`)
-  // The following should eventually be invoked asynchronously and then polled for completion to deal with the
-  // possibility of being locked out of the invoker pool long enough for the controller to disconnect.
-  const uploadResponse = await owClient.actions.invoke({ name: GET_UPLOAD_URL, blocking: true, result: true, params })
-  const { url, sliceName } = uploadResponse
+  const { url, sliceName } = await getUploadUrl(owClient, params, feedback)
   if (!url || !sliceName) {
     const msg = `Unexpected response from getUploadUrl`
     throw new Error(msg)

@@ -119,9 +119,12 @@ async function processRemoteResponse(activationId: string, owClient: openwhisk.C
   let activation: openwhisk.Activation<openwhisk.Dict>
   const tick = () => feedback.progress(`Processing of ${context} is still running remotely ...`)
   try {
-    activation = await waitForActivation(activationId, owClient, tick)
+    activation = await waitForActivation(activationId, owClient, tick, 15*60) // approx 15 minutes limit
   } catch (err) {
     return wrapError(err, context + ' (waiting for remote build response)')
+  }
+  if (!activation) {
+    return wrapError(new Error('Build timed out'), ' (waiting for remote build response)')
   }
   if (!activation.response || !activation.response.success) {
     let err = 'Remote build failed to provide a result'
