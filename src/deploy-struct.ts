@@ -38,7 +38,7 @@ export interface WebResource {
 export interface PackageSpec {
     name: string // The 'default' package is used to hold actions with no package.  Only the 'actions' member is processed then.
     actions?: ActionSpec[]
-    shared: boolean // Indicates that the package is intended to be shared (public)
+    shared?: boolean // Indicates that the package is intended to be shared (public)
     annotations?: Dict // package annotations
     parameters?: Dict // Bound parameters for all actions in the package, passed in the usual way
     environment?: Dict // Bound parameters for all actions in the package, destined to go in the environment of each action
