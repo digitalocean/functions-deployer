@@ -136,7 +136,9 @@ async function processRemoteResponse(activationId: string, owClient: openwhisk.C
         err = parts[parts.length - 1]
       }
     }
-    return wrapError(new Error(err), context + ' (running remote build)')
+    const thrown = new Error(err) as any
+    thrown.activation = JSON.stringify(activation, null, 2) // ensure deep enough nesting
+    return wrapError(thrown, context + ' (running remote build)')
   }
   const result = activation.response.result as Record<string, any>
   debug('Remote result was %O', result)

@@ -903,7 +903,9 @@ async function getUploadUrl(owClient: openwhisk.Client, params: { action: string
         err = parts[parts.length - 1]
       }
     }
-    throw new Error(err)
+    const thrown = new Error(err) as any
+    thrown.activation = JSON.stringify(activation, null, 2) // ensure deep enough nesting
+    throw thrown
   }
   const result = activation.response.result as Record<string, any>
   return { url: result.url, sliceName: result.sliceName }
