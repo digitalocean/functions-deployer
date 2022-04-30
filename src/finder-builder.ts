@@ -1283,8 +1283,16 @@ function npmBuilder(filepath: string, displayPath: string, flags: Flags, buildEn
 // We can assume that the local file system is usable.
 function buildScriptExists(filepath: string): boolean {
   const contents = fs.readFileSync(path.join(filepath, 'package.json'))
-  const pj = JSON.parse(String(contents))
-  return pj.scripts && pj.scripts.build
+  try {
+    const pj = JSON.parse(String(contents))
+    return pj.scripts && pj.scripts.build
+  } catch {
+    // For any parse failure, we simply avoid leaking the exception, which will be uninformative
+    // since the user doesn't realize we are doing our own parse of package.json.  The ensuing
+    // 'npm install'' or 'yarn install' will then fail with a diagnostic much more familiar to
+    // the developer who provided the unparsable package.json.
+    return false
+  }
 }
 
 // Get the Ignore object for screening files.  This always has the fixed entries for .ignore itself, .build, build.sh, and .build.cmd
