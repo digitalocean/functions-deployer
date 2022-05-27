@@ -108,6 +108,7 @@ export async function readTopLevel(filePath: string, env: string, buildEnv: stri
           lib = libDir
           break
         case '.nimbella':
+        case '.deployed':
           break
         default:
           strays.push(item.name)

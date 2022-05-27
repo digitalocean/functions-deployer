@@ -37,6 +37,7 @@ const debug = makeDebug('nim:deployer:util')
 // List of files/paths to be ignored, add https://github.com/micromatch/anymatch compatible definitions
 export const SYSTEM_EXCLUDE_PATTERNS = ['.gitignore', '.DS_Store', '**/.git/**',
   (s: string): boolean => s.includes('.nimbella'),
+  (s: string): boolean => s.includes('.deployed'),
   (s: string): boolean => s.includes('_tmp_'),
   (s: string): boolean => s.includes('.#'),
   (s: string): boolean => s.endsWith('~'),
@@ -1167,7 +1168,7 @@ export function digestAction(action: ActionSpec, code: string): string {
 
 // Get the status reporting directory, making it if it doesn't exist
 function getStatusDir(project: string): { statusDir: string, created: boolean } {
-  const statusDir = path.join(project, '.nimbella')
+  const statusDir = path.join(project, '.deployed')
   let created = false
   if (!fs.existsSync(statusDir)) {
     fs.mkdirSync(statusDir)
@@ -1239,7 +1240,7 @@ function mergeVersions(oldEntry: VersionEntry, newEntry: VersionEntry, replace: 
 
 // Load the version information of a project for a namespace and apihost.  Return an appropriately empty structure if not found.
 export function loadVersions(projectPath: string, namespace: string, apihost: string): VersionEntry {
-  const versionFile = path.join(projectPath, '.nimbella', 'versions.json')
+  const versionFile = path.join(projectPath, '.deployed', 'versions.json')
   if (fs.existsSync(versionFile)) {
     const allEntries = JSON.parse(String(fs.readFileSync(versionFile)))
     for (const entry of allEntries) {
