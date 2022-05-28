@@ -36,13 +36,7 @@ describe('test validation of loading project configuration', () => {
       }
     }
     const result = await loadProjectConfig('project.yml', '', '', '', (reader as unknown) as ProjectReader, null, {} as RuntimesConfig)
-    let expectedText
-    if (process.version.startsWith('v16')) {
-      expectedText = `Cannot read properties of undefined (reading 'slice')`
-    } else {
-      expectedText = `Cannot read property 'slice' of undefined`
-    }
-    expect(result.error.message).toBe(`Invalid project configuration file (project.yml): ${expectedText}`)
+    expect(result.error.message).toBe('Invalid project configuration file (project.yml): configuration is empty or unparseable')
   })
   test('should parse minimal YAML file', async () => {
     const reader = {

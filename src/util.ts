@@ -72,6 +72,12 @@ export async function loadProjectConfig(configFile: string, envPath: string, bui
           config = yaml.safeLoad(content) as Record<string, any>
         }
       }
+      if (!config) {
+        throw new Error('configuration is empty or unparseable')
+      }
+      // Adjust from the external convention (packages contain functions) to the internal one
+      // (packages contain actions).
+      renameFunctionsToActions(config)
       // Check config
       const configError = validateDeployConfig(config, runtimesConfig)
       if (configError) {
@@ -99,6 +105,33 @@ export async function loadProjectConfig(configFile: string, envPath: string, bui
       return errorStructure(err)
     }
   })
+}
+
+// Rename any 'functions' members of the contained PackageSpecs of a config to 'actions'.
+// This adjust from an external convention to an internal one.  It is done before validation.
+function renameFunctionsToActions(config: Record<string, any>): void {
+  if (config.packages) {
+    for (const pkg of config.packages) {
+      if (pkg.functions) {
+        pkg.actions = pkg.functions
+        delete pkg.functions
+      }
+    }
+  }
+}
+
+// Rename any 'actions' members of the contained PackageSpecs of a config to 'functions'.
+// This adjust from an external convention to an internal one.  It is done before writing out
+// a config to be visible to users.
+export function renameActionsToFunctions(config: Record<string, any>): void {
+  if (config.packages) {
+    for (const pkg of config.packages) {
+      if (pkg.actions) {
+        pkg.functions = pkg.actions
+        delete pkg.actions
+      }
+    }
+  }
 }
 
 // Check whether a build field actually implies a build must be run

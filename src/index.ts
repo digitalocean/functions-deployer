@@ -32,7 +32,7 @@ export {
 } from './credentials'
 export { cleanBucket, restore404Page, makeStorageClient } from './deploy-to-bucket'
 export { wskRequest, inBrowser, delay, writeSliceResult, getBestProjectName, isTextType, renamePackage, setInBrowserFlag, getExclusionList, isExcluded, 
-  SYSTEM_EXCLUDE_PATTERNS, getRuntimeForAction, emptyStructure, invokeWebSecure } from './util'
+  SYSTEM_EXCLUDE_PATTERNS, getRuntimeForAction, emptyStructure, invokeWebSecure, renameActionsToFunctions } from './util'
 export * from './runtimes'
 export { GithubDef, isGithubRef, parseGithubRef, fetchProject } from './github'
 export { deleteSlice } from './slice-reader'
