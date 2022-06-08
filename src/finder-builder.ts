@@ -1149,18 +1149,19 @@ function build(cmd: string, args: string[], realPath: string, displayPath: strin
     const shell = process.platform === 'win32' ? true : process.env.shell || '/bin/bash'
     const child = spawn(cmd, args, { cwd: realPath, shell, env })
     if (verbose && !slice) {
-	  // Verbose build behavior when build is local
+    // Verbose build behavior when build is local
       child.stdout.on('data', (data) => feedback.progress(String(data)))
       child.stderr.on('data', (data) => feedback.warn(String(data)))
     } else {
-	  // Non-verbose build behavior and verbose build behavior when build is remote
+    // Non-verbose build behavior and verbose build behavior when build is remote
       child.stdout.on('data', statusUpdate)
       child.stderr.on('data', statusUpdate)
     }
     child.on('close', (code) => {
       if (code !== 0) {
-	    // Failure case: the same whether local or remote
-        if (!verbose) {
+        // Failure case: locally, we dump the result iff verbose was not requested.
+        // Remotely, we always dump the result because it always has to be shown on error. 
+        if (!verbose || slice) {
           feedback.warn('Output of failed build in %s', realPath)
           if (isGithubRef(displayPath)) {
             feedback.warn('%s is a cache location for %s', realPath, displayPath)
@@ -1169,14 +1170,14 @@ function build(cmd: string, args: string[], realPath: string, displayPath: strin
         }
         reject(new Error(`'${errorTag}' exited with code ${code}`))
       } else {
-	    // Success case.
+      // Success case.
         feedback.progress('Finished running', infoMsg, 'in', displayPath)
         // For a local build, verbosity, if requested, has already occurred.
         // For a remote build, verbosity requires dumping the accumulated output.
-		if (verbose && slice) {
-			// Only warn is active for a remote build
-			feedback.warn(result)
-		}
+        if (verbose && slice) {
+          // Only warn is active for a remote build, so use that channel to report
+          feedback.warn(result)
+        }
         resolve(undefined)
       }
     })
@@ -1188,7 +1189,7 @@ function build(cmd: string, args: string[], realPath: string, displayPath: strin
 
 // The builder for a shell script
 function scriptBuilder(script: string, realPath: string, displayPath: string, flags: Flags, buildEnv: Record<string,string>, slice: boolean, 
-	feedback: Feedback): Promise<any> {
+  feedback: Feedback): Promise<any> {
   if (flags.incremental && scriptAppearsBuilt(realPath)) {
     if (flags.verboseBuild) {
       feedback.progress(`Skipping build in ${displayPath} because the action was previously built`)
