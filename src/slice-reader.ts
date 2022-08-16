@@ -27,6 +27,9 @@ const bucket = process.env.BUILDER_BUCKET_NAME
 const endpoint = process.env.S3_ENDPOINT
 // Environment must also contain AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
 
+// MAX_SLICE_UPLOAD_SIZE governs the maximum supported zipped size for a project slice 
+export const MAX_SLICE_UPLOAD_SIZE = parseInt(process.env.MAX_SLICE_UPLOAD_SIZE) || 64 * 1024 * 1024
+
 let s3Client: S3Client
 
 // Supports the fetching and deletion of project slices from build bucket.
@@ -75,7 +78,7 @@ export async function fetchSlice(sliceName: string): Promise<string> {
   const cmd = new GetObjectCommand({ Bucket: bucket, Key: sliceName })
   const result = await s3.send(cmd)
   const content = result.Body as Readable // Body has type ReadableStream<any>|Readable|Blob.  Readable seems to work in practice
-  const destination = new WritableStream({ highWaterMark: 1024 * 1024 })
+  const destination = new WritableStream({ highWaterMark: MAX_SLICE_UPLOAD_SIZE })
   await pipe(content, destination)
   const data = (destination as WritableStream).toBuffer()
   const zip = new Zip(data)

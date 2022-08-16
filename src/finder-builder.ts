@@ -32,6 +32,7 @@ import * as memoryStreams from 'memory-streams'
 import openwhisk = require('openwhisk')
 import { RuntimesConfig, canonicalRuntime } from './runtimes'
 import { onlyDeployPackage } from './deploy'
+import { MAX_SLICE_UPLOAD_SIZE } from './slice-reader'
 
 const debug = makeDebug('nim:deployer:finder-builder')
 const zipDebug = makeDebug('nim:deployer:zip')
@@ -688,11 +689,7 @@ async function appendAndCheck(zip: archiver.Archiver, file: string, actionPath: 
   }
   debug(`mode for ${file} is ${mode}`)
   zip.append(contents, { name: file, mode })
-  const size = zip.pointer()
-  if (size > 512 * 1024) {
-    throw new Error(`Remote build upload for '${actionPath}' exceeds 512K.  Make sure the directory is free of derived artifacts`)
-  }
-  zipDebug("zipped '%s' for remote build slice, emitted %d", file, size)
+  zipDebug("zipped '%s' for remote build slice", file)
 }
 
 // Initiate request to builder for building web content
@@ -781,7 +778,7 @@ interface ProjectSliceZip {
     outputPromise: Promise<any>
 }
 function makeProjectSliceZip(context: string): ProjectSliceZip {
-  const output: Writable = new memoryStreams.WritableStream({ highWaterMark: 1024 * 1024 })
+  const output: Writable = new memoryStreams.WritableStream({ highWaterMark: MAX_SLICE_UPLOAD_SIZE })
   const zip = archiver('zip')
   const outputPromise = new Promise(function(resolve, reject) {
     zip.on('error', err => {
@@ -927,7 +924,12 @@ async function invokeRemoteBuilder(zipped: Buffer, credentials: Credentials, owC
     throw new Error(msg)
   }
   debug('remote build url is %s', url)
-  const result = await axios.put(url, zipped)
+  const axiosConfig = {
+    // Override capacity limiting defaults 
+    maxBodyLength: MAX_SLICE_UPLOAD_SIZE,
+    maxContentLength: MAX_SLICE_UPLOAD_SIZE
+  }
+  const result = await axios.put(url, zipped, axiosConfig)
   if (result.status !== 200) {
     throw new Error(`Bad response [$result.status}] when uploading '${sliceName}' for remote build`)
   }
