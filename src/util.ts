@@ -679,6 +679,14 @@ export function wrapError(err: any, context: string): DeployResponse {
   return result
 }
 
+// Compute an appropriately qualified action name based on package inclusion
+export function getActionName(action: ActionSpec): string {
+  if (action.package && action.package !== 'default') {
+    return action.package + '/' + action.name
+  } 
+  return action.name
+}
+
 // Check whether the namespace for an OW client's current auth matches a desired target
 export function isTargetNamespaceValid(client: Client, namespace: string): Promise<boolean> {
   return getTargetNamespace(client).then(ns => {

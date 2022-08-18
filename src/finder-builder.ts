@@ -16,7 +16,8 @@ import { DeployStructure, ActionSpec, PackageSpec, WebResource, BuildTable, Flag
   Credentials, Feedback } from './deploy-struct'
 import {
   actionFileToParts, filterFiles, mapPackages, mapActions, convertToResources, convertPairsToResources,
-  promiseFilesAndFilterFiles, agreeOnRuntime, getBestProjectName, getExclusionList, waitForActivation
+  promiseFilesAndFilterFiles, agreeOnRuntime, getBestProjectName, getExclusionList, waitForActivation,
+  getActionName
 } from './util'
 import * as path from 'path'
 import * as fs from 'fs'
@@ -254,7 +255,7 @@ async function identifyActionFiles(action: ActionSpec, incremental: boolean, ver
     return promiseFilesAndFilterFiles(action.file, reader).then((items: string[]) => {
       items = applyIgnores(action.file, items, ignore)
       if (items.length === 0) {
-        return Promise.reject(new Error(`Action '${action.name}' has no included files`))
+        return Promise.reject(new Error(`Action '${getActionName(action)}' has no included files`))
       } else if (items.length === 1) {
         return singleFileBuilder(action, items[0], runtimes)
       } else {
@@ -602,9 +603,9 @@ async function doRemoteActionBuild(action: ActionSpec, project: DeployStructure,
   zip.append(config, { name: 'project.yml' })
   debug('finalizing zip for project slice')
   zip.finalize()
-  debug('zip finalized for project slice of action %s', action.name)
+  debug('zip finalized for project slice of action %s', getActionName(action))
   await outputPromise
-  debug('outputPromise settled for project slice of action %s', action.name)
+  debug('outputPromise settled for project slice of action %s', getActionName(action))
   const toSend = (output as memoryStreams.WritableStream).toBuffer()
   debug('sending the remote build request for project %s and action %s', project.filePath, actionName)
   action.buildResult = await invokeRemoteBuilder(toSend, project.credentials, project.owClient, project.feedback, runtimes, action)
@@ -841,7 +842,7 @@ async function legacyRemoteBuilder(zipped: Buffer, owClient: openwhisk.Client, f
   // Invoke the remote builder action.  The action name incorporates the runtime 'kind'.
   // That action will re-invoke the nim deployer in the target runtime.
   const kind = action ? action.runtime : 'nodejs:default'
-  const activityName = action ? `action '${action.name}'` : 'web content'
+  const activityName = action ? `action '${getActionName(action)}'` : 'web content'
   const runtime = canonicalRuntime(runtimes, kind).replace(':', '_')
   const buildActionName = `${BUILDER_ACTION_STEM}${runtime}`
   debug(`Invoking remote build action '${buildActionName}' for build '${path.basename(remoteName)} of ${activityName}`)
@@ -937,7 +938,7 @@ async function invokeRemoteBuilder(zipped: Buffer, credentials: Credentials, owC
   // Invoke the remote builder action.  The action name incorporates the runtime 'kind'.
   // That action will re-invoke the nim deployer in the target runtime.
   const kind = action ? action.runtime : 'nodejs:default'
-  const activityName = action ? `action '${action.name}'` : 'web content'
+  const activityName = action ? `action '${getActionName(action)}'` : 'web content'
   const runtime = canonicalRuntime(runtimes, kind).replace(':', '_')
   const buildActionName = `${BUILDER_ACTION_STEM}${runtime}`
   debug(`Invoking remote build action '${buildActionName}' for build '${path.basename(sliceName)} of ${activityName}`)
@@ -1053,14 +1054,14 @@ async function autozipBuilder(pairs: string[][], action: ActionSpec, incremental
   const inMemory = reader.getFSLocation() === null
   let output: Writable
   if (!inMemory) {
-    zipDebug('zipping to %s for action %s', targetZip, action.name)
+    zipDebug('zipping to %s for action %s', targetZip, getActionName(action))
     const localTargetZip = makeLocal(reader, targetZip)
     pairs = pairs.map(pair => [makeLocal(reader, pair[0]), pair[1]])
     if (fs.existsSync(localTargetZip)) {
       zipDebug('the file exists and will be either reused or deleted')
       if (incremental) {
         const metaFiles: string[] = [makeLocal(reader, action.file, '.include'), makeLocal(reader, action.file, '.ignore')].filter(fs.existsSync)
-        debug('checking whether to build a new zip for %s with metaFiles %o', action.name, metaFiles)
+        debug('checking whether to build a new zip for %s with metaFiles %o', getActionName(action), metaFiles)
         if (zipFileAppearsCurrent(localTargetZip, pairs.map(pair => pair[0]).concat(metaFiles))) {
           return singleFileBuilder(action, targetZip, runtimes)
         }
@@ -1070,7 +1071,7 @@ async function autozipBuilder(pairs: string[][], action: ActionSpec, incremental
     }
     output = fs.createWriteStream(localTargetZip)
   } else {
-    zipDebug('zipping to memory buffer for action %s', action.name)
+    zipDebug('zipping to memory buffer for action %s', getActionName(action))
     output = new memoryStreams.WritableStream({ highWaterMark: 1024 * 1024 })
   }
   const zip = archiver('zip')

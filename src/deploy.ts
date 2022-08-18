@@ -17,7 +17,7 @@ import {
 } from './deploy-struct'
 import { StorageClient } from '@nimbella/storage'
 import {
-  combineResponses, wrapError, wrapSuccess, keyVal, emptyResponse, isTextType,
+  combineResponses, wrapError, wrapSuccess, keyVal, emptyResponse, isTextType, getActionName,
   straysToResponse, wipe, makeDict, digestPackage, digestAction, loadVersions, waitForActivation
 } from './util'
 import openwhisk from 'openwhisk'
@@ -164,13 +164,12 @@ function cleanActionsAndPackages(todeploy: DeployStructure): Promise<DeployStruc
       // We should have headed off 'clean' of the default package already.  The added test is just in case
       promises.push(cleanPackage(todeploy.owClient, pkg.name, todeploy.versions))
     } else if (pkg.actions) {
-      const prefix = defaultPkg ? '' : pkg.name + '/'
       for (const action of pkg.actions) {
         if (action.clean && todeploy.includer.isActionIncluded(pkg.name, action.name) && !action.buildResult) {
           if (todeploy.versions && todeploy.versions.actionVersions) {
             delete todeploy.versions.actionVersions[action.name]
           }
-          promises.push(todeploy.owClient.actions.delete(prefix + action.name).catch(() => undefined))
+          promises.push(todeploy.owClient.actions.delete(getActionName(action)).catch(() => undefined))
         }
       }
     }
@@ -326,14 +325,13 @@ function isAtLeastOneNonEmpty(toCheck: object[]): boolean {
 // Deploy an action
 function deployAction(action: ActionSpec, spec: DeployStructure, pkgIsClean: boolean): Promise<DeployResponse> {
   const { owClient: wsk, feedback, reader } = spec
-  const prefix = action.package === 'default' ? '' : action.package + '/'
-  const context = `action '${prefix}${action.name}'`
+  const context = `action '${getActionName(action)}'`
   debug('deploying %s', context)
   if (action.buildError) {
     return Promise.resolve(wrapError(action.buildError, context))
   }
   if (action.buildResult) {
-    return processRemoteResponse(action.buildResult, wsk, `'${action.name}'`, feedback)
+    return processRemoteResponse(action.buildResult, wsk, context, feedback)
   }
   if (action.code) {
     debug('action already has code')
@@ -514,7 +512,7 @@ export function calculateActionExec(action: ActionSpec, code: string): Exec {
 // action is a sequence (Sequence passed in lieu of code).
 async function deployActionFromCodeOrSequence(action: ActionSpec, spec: DeployStructure,
   code: string, sequence: openwhisk.Sequence, pkgIsClean: boolean): Promise<DeployResponse> {
-  const name = action.package && action.package !== 'default' ? `${action.package}/${action.name}` : action.name
+  const name = getActionName(action)
   const { versions, flags, deployerAnnotation, owClient: wsk } = spec
   const deployerAnnot = Object.assign({}, deployerAnnotation)
 
