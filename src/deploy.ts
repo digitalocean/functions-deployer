@@ -544,22 +544,21 @@ async function deployActionFromCodeOrSequence(action: ActionSpec, spec: DeploySt
   deployerAnnot.zipped = action.zipped
   const annotations = Object.assign({}, action.annotations) || {}
   annotations.deployer = deployerAnnot
+  annotations['final'] = true
   if (action.web === true) {
     annotations['web-export'] = true
-    annotations.final = true
     annotations['raw-http'] = false
   } else if (action.web === 'raw') {
     annotations['web-export'] = true
-    annotations.final = true
     annotations['raw-http'] = true
   } else if (!action.web) {
     annotations['web-export'] = false
-    annotations.final = false
     annotations['raw-http'] = false
   }
-  if (typeof action.webSecure === 'string' || action.webSecure === true) {
+  if (typeof action.webSecure === 'string') {
     annotations['require-whisk-auth'] = action.webSecure
-  } else if (!action.webSecure) {
+  } else {
+    // A value of true should already have been flagged at validation time.
     annotations['require-whisk-auth'] = false
   }
   // Get the former annotations of the action if any

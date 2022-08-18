@@ -533,8 +533,8 @@ function validateActionSpec(arg: Record<string, any>, runtimesConfig: RuntimesCo
         }
         break
       case 'webSecure':
-        if (!(typeof arg[item] === 'boolean' || typeof arg[item] === 'string')) {
-          return `'${item}' member of an 'action' must be a boolean or a string`
+        if (!(arg[item] === false || typeof arg[item] === 'string')) {
+          return `'${item}' member of an 'action' must be a boolean false or a string`
         }
         break
       case 'environment': {
@@ -545,6 +545,14 @@ function validateActionSpec(arg: Record<string, any>, runtimesConfig: RuntimesCo
       }
       // falls through
       case 'annotations':
+        if (!isDictionary(arg[item])) {
+          return `${item} must be a dictionary`
+        }
+        const msg = screenForbiddenAnnotations(arg[item])
+        if (msg) {
+          return msg
+        }
+        break
       case 'parameters':
         if (!isDictionary(arg[item])) {
           return `${item} must be a dictionary`
@@ -562,6 +570,22 @@ function validateActionSpec(arg: Record<string, any>, runtimesConfig: RuntimesCo
     }
   }
   return undefined
+}
+
+// Don't permit manual setting of annotations that are supposed to be set specially
+function screenForbiddenAnnotations(annots: object): string {
+  const forbidden = {
+    'require-whisk-auth': 'webSecure',
+    'web-export': 'web=true|false|"raw"',
+    'raw-http': 'web=raw'
+  }
+  for (const annot of Object.keys(annots)) {
+    const subst = forbidden[annot]
+    if (subst) {
+      return `the '${annot}' annotation may not be set explicitly; use '${subst}'` 
+    }
+  }
+  return ''
 }
 
 // Validator for the 'environment' clause of package or action.  Checks that all values are strings
