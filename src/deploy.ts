@@ -18,11 +18,13 @@ import {
 import { StorageClient } from '@nimbella/storage'
 import {
   combineResponses, wrapError, wrapSuccess, keyVal, emptyResponse, isTextType, getActionName,
-  straysToResponse, wipe, makeDict, digestPackage, digestAction, loadVersions, waitForActivation
+  straysToResponse, wipe, makeDict, digestPackage, digestAction, loadVersions, waitForActivation,
+  deleteAction
 } from './util'
 import openwhisk from 'openwhisk'
 import { deployToBucket, cleanBucket } from './deploy-to-bucket'
 import { ensureWebLocal, deployToWebLocal } from './web-local'
+import { deployTriggers } from './triggers'
 import rimrafOrig from 'rimraf'
 import { promisify } from 'util'
 import makeDebug from 'debug'
@@ -169,7 +171,7 @@ function cleanActionsAndPackages(todeploy: DeployStructure): Promise<DeployStruc
           if (todeploy.versions && todeploy.versions.actionVersions) {
             delete todeploy.versions.actionVersions[action.name]
           }
-          promises.push(todeploy.owClient.actions.delete(getActionName(action)).catch(() => undefined))
+          promises.push(deleteAction(getActionName(action), todeploy.owClient).catch(() => undefined))
         }
       }
     }
@@ -194,7 +196,7 @@ export async function cleanPackage(client: openwhisk.Client, name: string, versi
     for (const action of pkg.actions) {
       debug('deleting action %s', action.name)
       if (versions && versions.actionVersions) { delete versions.actionVersions[action.name] }
-      await client.actions.delete({ name: name + '/' + action.name })
+      await deleteAction(name + '/' + action.name, client)
     }
   }
 }
@@ -515,6 +517,13 @@ async function deployActionFromCodeOrSequence(action: ActionSpec, spec: DeploySt
   const name = getActionName(action)
   const { versions, flags, deployerAnnotation, owClient: wsk } = spec
   const deployerAnnot = Object.assign({}, deployerAnnotation)
+  const triggers = action.triggers?.map(trigger => {
+    return {
+      name: trigger.name,
+      sourceType: trigger.sourceType,
+      sourceDetails: trigger.sourceDetails
+    }
+  })
 
   debug('deploying %s using %s', name, !sequence ? 'code' : 'sequence info')
   if (code && !action.runtime) {
@@ -544,7 +553,11 @@ async function deployActionFromCodeOrSequence(action: ActionSpec, spec: DeploySt
   deployerAnnot.zipped = action.zipped
   const annotations = Object.assign({}, action.annotations) || {}
   annotations.deployer = deployerAnnot
-  annotations['final'] = true
+  annotations.final = true
+  if (triggers && triggers.length > 0) {
+    annotations.triggers = triggers
+  }
+  
   if (action.web === true) {
     annotations['web-export'] = true
     annotations['raw-http'] = false
@@ -578,14 +591,22 @@ async function deployActionFromCodeOrSequence(action: ActionSpec, spec: DeploySt
     actionBody.limits = action.limits
   }
   const deployParams = { name, action: actionBody }
-  return wsk.actions.update(deployParams).then(response => {
+  try {
+    const response = await wsk.actions.update(deployParams)
+    if (action.triggers) {
+      await deployTriggers(action.triggers, name, wsk)
+      // TODO what, if anything, do we do with normal output?
+    }
     const map = {}
     if (digest) {
       map[name] = { version: response.version, digest }
     }
     const namespace = response.namespace.split('/')[0]
     return Promise.resolve(wrapSuccess(name, 'action', false, action.wrapping, map, namespace))
-  }).catch(err => {
+  } catch(err) {
+    // TODO if the failure was in the trigger install, should the function be left in place?
+    // Note that, in general, the deployer does not provide atomicity guarantees.  It can easily
+    // end up doing partial deploys in other ways.
     return Promise.resolve(wrapError(err, `action '${name}'`))
-  })
+  }
 }

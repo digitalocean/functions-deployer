@@ -18,6 +18,7 @@ import {
 import { getUserAgent } from './api'
 import { XMLHttpRequest } from 'xmlhttprequest'
 import { Client, Dict, Activation } from 'openwhisk'
+import { isValidCron } from 'cron-validator'
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
@@ -32,6 +33,7 @@ import anymatch from 'anymatch'
 import { parseGithubRef } from './github'
 import { nimbellaDir } from './credentials'
 import { isBinaryFileExtension, runtimeForZipMid, runtimeForFileExtension, RuntimesConfig, isValidRuntime} from './runtimes'
+import { undeployTriggers, listTriggersForNamespace } from './triggers'
 const debug = makeDebug('nim:deployer:util')
 
 // List of files/paths to be ignored, add https://github.com/micromatch/anymatch compatible definitions
@@ -544,15 +546,16 @@ function validateActionSpec(arg: Record<string, any>, runtimesConfig: RuntimesCo
         }
       }
       // falls through
-      case 'annotations':
+      case 'annotations': {
         if (!isDictionary(arg[item])) {
           return `${item} must be a dictionary`
         }
-        const msg = screenForbiddenAnnotations(arg[item])
-        if (msg) {
-          return msg
+        const annotErr = screenForbiddenAnnotations(arg[item])
+        if (annotErr) {
+          return annotErr
         }
         break
+      }
       case 'parameters':
         if (!isDictionary(arg[item])) {
           return `${item} must be a dictionary`
@@ -562,6 +565,13 @@ function validateActionSpec(arg: Record<string, any>, runtimesConfig: RuntimesCo
         const limitsError = validateLimits(arg[item])
         if (limitsError) {
           return limitsError
+        }
+        break
+      }
+      case 'triggers': {
+        const trigErr = validateTriggers(arg[item])
+        if (trigErr) {
+          return trigErr
         }
         break
       }
@@ -586,6 +596,104 @@ function screenForbiddenAnnotations(annots: object): string {
     }
   }
   return ''
+}
+
+// Validator for the 'triggers' clause of an action
+function validateTriggers(arg: any): string {
+  if (!Array.isArray(arg)) {
+    return `a 'triggers' clause must be an array`
+  }
+  for (const trigger of arg) {
+    if (!isDictionary(trigger)) {
+      return 'an individual trigger must be a dictionary'
+    }
+    let name = false, sourceType = false, sourceDetails = false
+    for (const item in trigger) {
+      const value = trigger[item]
+        switch(item) {
+          case 'name':
+            if (typeof value !== 'string') {
+              return `a trigger name must be a string but the provided type is'${typeof value}'`
+            }
+            name = true
+            break          
+          case 'sourceType':
+            if (value !== 'scheduler') {
+              return `only triggers with sourcetype 'scheduler' are supported at this time`
+            }
+            sourceType = true
+            break
+          case 'sourceDetails': {
+            // TODO more dispatching will be needed here when more sourceTypes are supported
+            const schedErr = validateSchedulerSourceDetails(value)
+            if (schedErr) {
+              return schedErr
+            }
+            sourceDetails = true
+            break
+          }
+          case 'overwrite':
+          case 'enabled':
+            if (typeof value !== 'boolean') {
+              return `the '${item}' property of a trigger must be boolean'`
+            }
+            break
+          default:
+            return `Invalid key '${item}' found in 'triggers' clause in project.yml`
+        }
+     }
+     if (!name) {
+       return `the 'name' field of a trigger is required`   
+     }
+     if (!sourceType) {
+       return `the 'sourceType' field of a trigger required`   
+     }
+     if (!sourceDetails) {
+       return `the 'sourceDetails' property of a trigger is required`   
+    }
+  }
+  return undefined
+}
+
+// Validator for the sourceDetails of a trigger when the sourceType is 'scheduler'
+function validateSchedulerSourceDetails(arg: any): string {
+  if (!isDictionary(arg)) {
+    return 'the sourceDetails field of a trigger specification must be a dictionary'
+  }
+  let timeFound = false
+  for (const item in arg) {
+    const value = arg[item]
+    switch (item) {
+      case 'cron':
+        timeFound = true
+        if (typeof value !== 'string') {
+          return `the 'cron' member of scheduler 'sourceDetails' must be a string`
+        }
+        if (!isValidCron(value)) {
+          // Note we are now validating with no "special options" enabled, so this is
+          // least-common-denominator crontab (no seconds, no aliases, etc.).  We should make sure
+          // we are at least considering valid anything that the scheduler will actually accept.
+          return `the cron expression '${value}' is not valid crontab syntax`
+        }
+        break
+      case 'interval':
+      case 'once':
+        // TODO validate properly once implemented.  Eventually check that only one
+        // of cron, interval or once is specified.
+        return `the ${item} member of scheduler sourceDetails is defined but not yet implemented`
+      case 'withBody':
+        if (!isDictionary(value)) {
+          return `the 'withBody' member of scheduler sourceDetails must be a dictionary`
+        }
+        break
+      default:
+        return `Invalid key '${item}' found in scheduler 'sourceDetails' in project.yml`
+    }
+  }
+  if (!timeFound) {
+    return `no trigger time was specified for a trigger with sourcetype 'scheduler'`
+  }  
+  return undefined
 }
 
 // Validator for the 'environment' clause of package or action.  Checks that all values are strings
@@ -1100,9 +1208,14 @@ export async function wipe(client: Client): Promise<void> {
   await wipeAll(client.rules, 'Rule')
   debug('Rules wiped')
   await wipeAll(client.triggers, 'Trigger')
-  debug('Triggers wiped')
+  debug('OpenWhisk triggers wiped')
   await wipeAll(client.packages, 'Package')
   debug('Packages wiped')
+  const triggers = await listTriggersForNamespace(client)
+  if (triggers) {
+    debug('There are %d DigitalOcean triggers to remove', triggers.length)
+    await undeployTriggers(triggers, client)
+  }
 }
 
 // Repeatedly wipe an entity (action, rule, trigger, or package) from the namespace denoted by the OW client until none are left
@@ -1122,6 +1235,19 @@ async function wipeAll(handle: any, kind: string) {
       await handle.delete(name)
       debug('%s %s deleted', kind, name)
     }
+  }
+}
+
+// Delete an action while also deleting any triggers that are affixed to it via its triggers annotation
+export async function deleteAction(actionName: string, owClient: Client): Promise<void> {
+  // First delete the action itself.  If this fails it will throw
+  // Retain the return value, which is a copy of the action's metadata
+  const action = await owClient.actions.delete({ name: actionName})
+  // Delete associated triggers (if any)
+  const triggers = action.annotations?.find(annot => annot.key === 'triggers')?.value
+  if (triggers && Array.isArray(triggers)) {
+    const triggerNames = triggers.map((trigger: { name: string }) => trigger.name)
+    await undeployTriggers(triggerNames, owClient)
   }
 }
 
