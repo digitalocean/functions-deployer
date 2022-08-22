@@ -85,7 +85,6 @@ export interface TriggerSpec {
     name: string // The name of the trigger.  Must be unique within the namespace.
     sourceType: string // Currently, the one supported value "scheduler" is required.
     sourceDetails: any // Currently, must conform to SchedulerSourceDetails
-    overwrite?: boolean // Assumed false if omitted
     enabled?: boolean // Assumed true if omitted 
 }
 

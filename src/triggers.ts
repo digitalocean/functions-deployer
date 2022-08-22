@@ -44,14 +44,14 @@ export async function undeployTriggers(triggers: string[], wsk: openwhisk.Client
 async function deployTrigger(trigger: TriggerSpec, functionName: string, wsk: openwhisk.Client): Promise<object> {
   const details = trigger.sourceDetails as SchedulerSourceDetails
   const { cron, withBody } = details
-  const { sourceType, overwrite, enabled } = trigger
+  const { sourceType, enabled } = trigger
   const params = {
     triggerName: trigger.name,
     function: functionName,
     sourceType,
     cron,
     withBody,
-    overwrite,
+    overwrite: true,
     enabled
   }
   return await wsk.actions.invoke({
