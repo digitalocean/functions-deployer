@@ -17,7 +17,7 @@ import {
 } from './deploy-struct'
 import { getUserAgent } from './api'
 import { XMLHttpRequest } from 'xmlhttprequest'
-import { Client, Dict, Activation } from 'openwhisk'
+import { Client, Dict, Activation, Action } from 'openwhisk'
 import { isValidCron } from 'cron-validator'
 import * as fs from 'fs'
 import * as os from 'os'
@@ -1239,7 +1239,7 @@ async function wipeAll(handle: any, kind: string) {
 }
 
 // Delete an action while also deleting any triggers that are affixed to it via its triggers annotation
-export async function deleteAction(actionName: string, owClient: Client): Promise<void> {
+export async function deleteAction(actionName: string, owClient: Client): Promise<Action> {
   // First delete the action itself.  If this fails it will throw
   // Retain the return value, which is a copy of the action's metadata
   const action = await owClient.actions.delete({ name: actionName})
@@ -1249,6 +1249,7 @@ export async function deleteAction(actionName: string, owClient: Client): Promis
     const triggerNames = triggers.map((trigger: { name: string }) => trigger.name)
     await undeployTriggers(triggerNames, owClient)
   }
+  return action
 }
 
 // Generate a secret in the form of a random alphameric string (TODO what form(s) do we actually support)
