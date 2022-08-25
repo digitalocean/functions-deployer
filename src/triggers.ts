@@ -67,7 +67,6 @@ async function undeployTrigger(trigger: string, wsk: openwhisk.Client) {
   const params = {
     triggerName: trigger
   }
-  console.log('undeploying', trigger)
   return await wsk.actions.invoke({
     name: '/nimbella/triggers/delete',
     params,
