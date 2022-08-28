@@ -1238,17 +1238,14 @@ async function wipeAll(handle: any, kind: string) {
   }
 }
 
-// Delete an action while also deleting any triggers that are affixed to it via its triggers annotation
+// Delete an action while also deleting any DigitalOcean triggers that are targetting it
 export async function deleteAction(actionName: string, owClient: Client): Promise<Action> {
-  // First delete the action itself.  If this fails it will throw
-  // Retain the return value, which is a copy of the action's metadata
+  // First delete the action itself.  If this fails it will throw.
+  // Save the action contents so they can be returned as a result.
   const action = await owClient.actions.delete({ name: actionName})
   // Delete associated triggers (if any)
-  const triggers = action.annotations?.find(annot => annot.key === 'triggers')?.value
-  if (triggers && Array.isArray(triggers)) {
-    const triggerNames = triggers.map((trigger: { name: string }) => trigger.name)
-    await undeployTriggers(triggerNames, owClient)
-  }
+  const triggers = await listTriggersForNamespace(owClient, actionName)
+  await undeployTriggers(triggers, owClient)
   return action
 }
 

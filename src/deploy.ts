@@ -517,13 +517,6 @@ async function deployActionFromCodeOrSequence(action: ActionSpec, spec: DeploySt
   const name = getActionName(action)
   const { versions, flags, deployerAnnotation, owClient: wsk } = spec
   const deployerAnnot = Object.assign({}, deployerAnnotation)
-  const triggers = action.triggers?.map(trigger => {
-    return {
-      name: trigger.name,
-      sourceType: trigger.sourceType,
-      sourceDetails: trigger.sourceDetails
-    }
-  })
 
   debug('deploying %s using %s', name, !sequence ? 'code' : 'sequence info')
   if (code && !action.runtime) {
@@ -554,9 +547,6 @@ async function deployActionFromCodeOrSequence(action: ActionSpec, spec: DeploySt
   const annotations = Object.assign({}, action.annotations) || {}
   annotations.deployer = deployerAnnot
   annotations.final = true
-  if (triggers && triggers.length > 0) {
-    annotations.triggers = triggers
-  }
   
   if (action.web === true) {
     annotations['web-export'] = true
@@ -595,7 +585,6 @@ async function deployActionFromCodeOrSequence(action: ActionSpec, spec: DeploySt
     const response = await wsk.actions.update(deployParams)
     if (action.triggers) {
       await deployTriggers(action.triggers, name, wsk)
-      // TODO what, if anything, do we do with normal output?
     }
     const map = {}
     if (digest) {

@@ -11,12 +11,12 @@
  * governing permissions and limitations under the License.
  */
 
-// Includes support for installing triggers and removing in the scheduling server, when such triggers 
-// are attached to an action.  Currently, only sourceType=scheduler is supported for triggers.  Others will
-// be rejected.  Eventually, this can be replaced by a dispatching discipline of some sort that looks at the
-// sourceType and calls specialized code for that source type.
+// Includes support for listing, installing, and removing triggers in the scheduling server, when such
+// triggers are attached to an action.  Currently, only sourceType=scheduler is supported for triggers.
+// Others will be rejected.  Eventually, this can be replaced by a dispatching discipline of some sort
+// that looks at the sourceType and calls specialized code for that source type.
 
-// TEMPORARY: this code is invoking actions in /nimbella/triggers/[create|delete|list|get] rather than
+// TEMPORARY: this code is invoking actions in /nimbella/triggers/[create|delete|list] rather than
 // APIs more closely associated with the scheduling service.   This is likely to change if this
 // direction is adopted longer term. This should be the only file that has to change.
 
@@ -75,12 +75,14 @@ async function undeployTrigger(trigger: string, wsk: openwhisk.Client) {
   })
 }
 
-// Temporary code to get all the triggers for a namespace using the prototype API
-export async function listTriggersForNamespace(wsk: openwhisk.Client): Promise<string[]> {
+// Temporary code to get all the triggers for a namespace, or all the triggers for a function in the
+// namespace, using the prototype API.
+export async function listTriggersForNamespace(wsk: openwhisk.Client, fcn?: string): Promise<string[]> {
   const triggers = await wsk.actions.invoke({
     name: '/nimbella/triggers/list',
+    params: fcn ? { function: fcn } : undefined,
     blocking: true,
     result: true
   })
-  return triggers.items.map(trigger => trigger.triggerName)
+  return triggers.items.map((trigger: any) => trigger.triggerName)
 }
