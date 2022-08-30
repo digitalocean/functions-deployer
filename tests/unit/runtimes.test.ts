@@ -176,16 +176,16 @@ describe('test finding default runtimes', () => {
 describe('test determing runtime for an extension', () => {
   test('should return runtimes for hardcoded extensions', () => {
     const known_runtimes = {
-      'rs': 'rust:default',
+//      'rs': 'rust:default',
       'js': 'nodejs:default',
       'py': 'python:default',
-      'ts': 'typescript:default',
-      'java': 'java:default',
-      'jar': 'java:default',
+      'ts': 'nodejs:default',
+//      'java': 'java:default',
+//      'jar': 'java:default',
       'go': 'go:default',
-      'swift': 'swift:default',
+//      'swift': 'swift:default',
       'php': 'php:default',
-      'rb': 'ruby:default',
+//      'rb': 'ruby:default',
     }
 
     for (let [extension, runtime] of Object.entries(known_runtimes)) {
@@ -222,21 +222,21 @@ describe('test determining extension from runtime', () => {
   test('should return extensions for known non-binary runtimes (version & default)', () => {
     const known_runtimes = {
       'go': ['go'],
-      'java': ['java', 'jar'],
-      'nodejs': ['js'],
-      'typescript': ['ts'],
+//      'java': ['java', 'jar'],
+      'nodejs': ['js', 'ts'],
       'php': ['php'],
       'python': ['py'],
-      'ruby': ['rb'],
-      'rust': ['rs'],
-      'swift': ['swift'],
-      'deno': ['ts', 'js'],
-      'dotnet': ['cs', 'vb']
+//      'ruby': ['rb'],
+//      'rust': ['rs'],
+//      'swift': ['swift'],
+//      'deno': ['ts', 'js'],
+//      'dotnet': ['cs', 'vb']
     }
     for (let [runtime, extension] of Object.entries(known_runtimes)) {
       expect(fileExtensionForRuntime(runtime, false)).toEqual(extension[0])
     }
   })
+  /*
   test('should return extensions for known binary runtimes (version & default)', () => {
     const known_runtimes = {
       'java': ['java', 'jar']
@@ -245,6 +245,7 @@ describe('test determining extension from runtime', () => {
       expect(fileExtensionForRuntime(runtime, true)).toEqual(extension[1])
     }
   })
+  */
 
   test('should return undefined for unknown runtimes', () => {
     expect(() => fileExtensionForRuntime('unknown:10', false)).toThrow(`Invalid runtime unknown:10 encountered`)

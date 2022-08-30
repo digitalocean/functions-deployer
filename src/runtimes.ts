@@ -22,18 +22,20 @@ export type RuntimesConfig = Record<RuntimeLabel, Runtime[]>
 
 // List of file extensions for runtimes. This hardcoded list used to be present
 // in the extensions field of the runtimes.json document.
+// The commented-out lines are not currently supported by DigitalOcean;
+// some may be supported in the future.
 const FileExtensionRuntimes: Record<RuntimeKind, RuntimeFileExtension[]> = {
   'go': ['go'],
-  'java': ['java', 'jar'],
-  'nodejs': ['js'],
-  'typescript': ['ts'],
+//  'java': ['java', 'jar'],
+  'nodejs': ['js', 'ts'], // nodejs works for both javascript and typescript
+//  'typescript': ['ts'],
   'php': ['php'],
   'python': ['py'],
-  'ruby': ['rb'],
-  'rust': ['rs'],
-  'swift': ['swift'],
-  'deno': ['ts', 'js'],
-  'dotnet': ['cs', 'vb']
+//  'ruby': ['rb'],
+//  'rust': ['rs'],
+//  'swift': ['swift'],
+//  'deno': ['ts', 'js'],
+//  'dotnet': ['cs', 'vb']
 }
 
 // File extensions which imply binary data
