@@ -22,6 +22,8 @@
 
 import openwhisk from 'openwhisk'
 import { TriggerSpec, SchedulerSourceDetails } from './deploy-struct'
+import makeDebug from 'debug'
+const debug = makeDebug('nim:deployer:triggers')
 
 export async function deployTriggers(triggers: TriggerSpec[], functionName: string, 
     wsk: openwhisk.Client): Promise<object[]> {
@@ -64,6 +66,7 @@ async function deployTrigger(trigger: TriggerSpec, functionName: string, wsk: op
 
 // Temporary code to undeploy a trigger using the prototype API
 async function undeployTrigger(trigger: string, wsk: openwhisk.Client) {
+  debug('undeploying trigger %s', trigger)
   const params = {
     triggerName: trigger
   }
@@ -78,11 +81,16 @@ async function undeployTrigger(trigger: string, wsk: openwhisk.Client) {
 // Temporary code to get all the triggers for a namespace, or all the triggers for a function in the
 // namespace, using the prototype API.
 export async function listTriggersForNamespace(wsk: openwhisk.Client, fcn?: string): Promise<string[]> {
-  const triggers = await wsk.actions.invoke({
+  debug('listing triggers')
+  const params: any = {
     name: '/nimbella/triggers/list',
-    params: fcn ? { function: fcn } : undefined,
     blocking: true,
     result: true
-  })
+  }
+  if (fcn) {
+    params.params = { function: fcn }
+  }
+  const triggers: any = await wsk.actions.invoke(params)
+  debug('triggers listed')
   return triggers.items.map((trigger: any) => trigger.triggerName)
 }
