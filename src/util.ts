@@ -311,6 +311,7 @@ function removeEmptyStringMembersFromPackages(packages: PackageSpec[]) {
 // is not expected in this context.  TODO return a list of errors not just the first error.
 export function validateDeployConfig(arg: any, runtimesConfig: RuntimesConfig): string {
   let haveActionWrap = false; let haveBucket = false
+  const isNimbellaDeploy = arg.targetNamespace === 'nimbella'
   const slice = !!arg.slice
   for (const item in arg) {
     if (!arg[item]) continue
@@ -345,7 +346,7 @@ export function validateDeployConfig(arg: any, runtimesConfig: RuntimesConfig): 
           return 'packages member must be an array'
         }
         for (const subitem of arg[item]) {
-          const pkgError = validatePackageSpec(subitem, runtimesConfig, slice)
+          const pkgError = validatePackageSpec(subitem, runtimesConfig, slice, isNimbellaDeploy)
           if (pkgError) {
             return pkgError
           }
@@ -450,7 +451,8 @@ function validateWebResource(arg: Record<string, any>): string {
 }
 
 // Validator for a PackageSpec
-function validatePackageSpec(arg: Record<string, any>, runtimesConfig: RuntimesConfig, slice: boolean): string {
+function validatePackageSpec(arg: Record<string, any>, runtimesConfig: RuntimesConfig, slice: boolean,
+    isNimbella: boolean): string {
   const isDefault = arg.name === 'default'
   for (const item in arg) {
     if (!arg[item]) continue
@@ -463,7 +465,7 @@ function validatePackageSpec(arg: Record<string, any>, runtimesConfig: RuntimesC
         return "actions member of a 'package' must be an array"
       }
       for (const subitem of arg[item]) {
-        const actionError = validateActionSpec(subitem, runtimesConfig)
+        const actionError = validateActionSpec(subitem, runtimesConfig, isNimbella)
         if (actionError) {
           return actionError
         }
@@ -500,7 +502,7 @@ function validatePackageSpec(arg: Record<string, any>, runtimesConfig: RuntimesC
 }
 
 // Validator for ActionSpec
-function validateActionSpec(arg: Record<string, any>, runtimesConfig: RuntimesConfig): string {
+function validateActionSpec(arg: Record<string, any>, runtimesConfig: RuntimesConfig, isNimbella: boolean): string {
   for (const item in arg) {
     if (!arg[item]) continue
     switch (item) {
@@ -535,6 +537,10 @@ function validateActionSpec(arg: Record<string, any>, runtimesConfig: RuntimesCo
         }
         break
       case 'webSecure':
+        if (isNimbella && arg[item] === true) {
+          // allowed
+          continue
+        }
         if (!(arg[item] === false || typeof arg[item] === 'string')) {
           return `'${item}' member of an 'action' must be a boolean false or a string`
         }
