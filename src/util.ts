@@ -1217,10 +1217,13 @@ export async function wipe(client: Client): Promise<void> {
   debug('OpenWhisk triggers wiped')
   await wipeAll(client.packages, 'Package')
   debug('Packages wiped')
-  const triggers = await listTriggersForNamespace(client)
+  const namespace = await getTargetNamespace(client)
+  const triggers = await listTriggersForNamespace(client, namespace)
   if (triggers) {
     debug('There are %d DigitalOcean triggers to remove', triggers.length)
-    await undeployTriggers(triggers, client)
+    await undeployTriggers(triggers, client, namespace)
+    // TODO errors are being fed back here but are currently ignored.  It is not completely
+    // clear what should be done with them.
   }
 }
 
@@ -1250,8 +1253,9 @@ export async function deleteAction(actionName: string, owClient: Client): Promis
   // Save the action contents so they can be returned as a result.
   const action = await owClient.actions.delete({ name: actionName})
   // Delete associated triggers (if any)
-  const triggers = await listTriggersForNamespace(owClient, actionName)
-  await undeployTriggers(triggers, owClient)
+  const namespace = await getTargetNamespace(owClient)
+  const triggers = await listTriggersForNamespace(owClient, namespace, actionName)
+  await undeployTriggers(triggers, owClient, namespace)
   return action
 }
 

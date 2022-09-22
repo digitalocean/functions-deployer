@@ -211,7 +211,7 @@ export interface VersionMap {
     [key: string]: VersionInfo
 }
 
-export type DeployKind = 'web' | 'action'
+export type DeployKind = 'web' | 'action' | 'trigger'
 
 export interface DeploySuccess {
     name: string

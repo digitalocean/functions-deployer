@@ -13,7 +13,7 @@
 
 import {
   DeployStructure, DeployResponse, ActionSpec, PackageSpec, WebResource, BucketSpec, VersionEntry,
-  ProjectReader, OWOptions, KeyVal, Feedback
+  ProjectReader, OWOptions, KeyVal, Feedback, DeploySuccess
 } from './deploy-struct'
 import { StorageClient } from '@nimbella/storage'
 import {
@@ -583,19 +583,33 @@ async function deployActionFromCodeOrSequence(action: ActionSpec, spec: DeploySt
   const deployParams = { name, action: actionBody }
   try {
     const response = await wsk.actions.update(deployParams)
+    
+    let triggerResults: (DeploySuccess|Error)[] = []
     if (action.triggers) {
-      await deployTriggers(action.triggers, name, wsk)
+      triggerResults = await deployTriggers(action.triggers, name, wsk, spec.credentials.namespace)
     }
     const map = {}
     if (digest) {
       map[name] = { version: response.version, digest }
     }
     const namespace = response.namespace.split('/')[0]
-    return Promise.resolve(wrapSuccess(name, 'action', false, action.wrapping, map, namespace))
+    const success = wrapSuccess(name, 'action', false, action.wrapping, map, namespace)
+    for (let i = 0; i < triggerResults.length; i++) {
+      if (triggerResults[i] instanceof Error) {
+        const err = triggerResults[i] as any
+        err.context = `while deploying trigger '${action.triggers[i].name}'`
+        success.failures.push(triggerResults[i] as Error)
+      } else {
+        success.successes.push(triggerResults[i] as DeploySuccess)
+      }
+    }
+    return Promise.resolve(success)
   } catch(err) {
-    // TODO if the failure was in the trigger install, should the function be left in place?
-    // Note that, in general, the deployer does not provide atomicity guarantees.  It can easily
-    // end up doing partial deploys in other ways.
+    // Note this is not the usual catch block for trigger deployment errors.   Those are caught in
+    // deployTriggers and fed back in the results.  The function itself will not be backed out if triggers
+    // fail to deploy.  Rather, both statuses are reported (success for the function and possibly some
+    // triggers, failure for those triggers that failed).  We reach here if the function fails to deploy
+    // or if system-level errors occurred in the logic somewhere.
     return Promise.resolve(wrapError(err, `action '${name}'`))
   }
 }
