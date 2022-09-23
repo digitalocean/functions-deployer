@@ -94,7 +94,7 @@ async function deployTrigger(trigger: TriggerSpec, functionName: string, wsk: op
     if (!usePrototype && doAPIKey) {
         // Call the real API
         debug('calling the real trigger API to create %s', trigger.name)
-        return await doTriggerCreate(trigger.name, functionName, namespace, cron, enabled)
+        return await doTriggerCreate(trigger.name, functionName, namespace, cron, enabled, withBody)
     } else if (usePrototype) {
         // Call the prototype API
         await wsk.actions.invoke({
@@ -121,7 +121,7 @@ async function deployTrigger(trigger: TriggerSpec, functionName: string, wsk: op
 // Create a trigger using the real API.  Note: the prototype API has the capability to do an UPSERT (by
 // setting the overwrite flag) and we use this.  Here, we need to simulate the effect by doing a speculative
 // delete, ignoring 404 errors (actually, we are ignoring all errors, which is probably adequate).
-async function doTriggerCreate(trigger: string, fcn: string, namespace: string, cron: string, enabled: boolean): Promise<DeploySuccess> {
+async function doTriggerCreate(trigger: string, fcn: string, namespace: string, cron: string, enabled: boolean, withBody: object): Promise<DeploySuccess> {
   try {
     await doTriggerDelete(trigger, namespace)
   } catch {}
@@ -134,9 +134,11 @@ async function doTriggerCreate(trigger: string, fcn: string, namespace: string, 
       function: fcn,
       is_enabled: enabled !== false, // ie, defaults to true
       trigger_source: 'SCHEDULED',
-      cron
+      cron,
+      body: withBody
     }
   }
+  debug('trigger create request config is: %O', config)
   await doAxios(config)
   return { name: trigger, kind: 'trigger', skipped: false }
 }
