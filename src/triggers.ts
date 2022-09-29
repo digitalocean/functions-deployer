@@ -160,8 +160,14 @@ async function doTriggerList(namespace: string, fcn: string): Promise<string[]> 
     url: doAPIEndpoint + `/v2/functions/triggers/${namespace}`,
     method: 'get'
   }
-  const triggers = await doAxios(config) as TriggerList
-  debug('got trigger list result from real API: %O', triggers)
+  let triggers: TriggerList
+  try {
+    triggers = await doAxios(config) as TriggerList
+  } catch (err) {
+    debug('error listing triggers: %s', err.message)
+    return [] 
+  }
+  debug('got trigger list result from the API: %O', triggers)
   if (!triggers.triggers) {
     debug('result did not have triggers member')
     return []
