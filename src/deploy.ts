@@ -586,7 +586,7 @@ async function deployActionFromCodeOrSequence(action: ActionSpec, spec: DeploySt
     
     let triggerResults: (DeploySuccess|Error)[] = []
     if (action.triggers) {
-      triggerResults = await deployTriggers(action.triggers, name, wsk, spec.credentials.namespace)
+      triggerResults = await deployTriggers(action.triggers, name, spec.credentials.namespace)
     }
     const map = {}
     if (digest) {

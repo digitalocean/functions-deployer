@@ -14,97 +14,59 @@
 // Includes support for listing, installing, and removing triggers, when such triggers are attached to
 // an action.
 
-// TEMPORARY: some of this code will, if requested, invoke actions in /nimbella/triggers/[create|delete|list]
-// rather than the trigger APIs defined on api.digitalocean.com/v2/functions.  The actions in question
-// implement a prototype verion of the API which is still being used as a reference implementation until
-// the trigger APIs are stable and adequate.  The two are not functionally equivalent in that the prototype
-// API will result in updates to the public scheduling service (not the production one in DOCC).
-// 
-// To request the prototype API set TRIGGERS_USE_PROTOTYPE non-empty in the environment.
-//
-// Unless the prototype API is used, the DO_API_KEY environment variable must be set to the DO API key that
-// should be used to contact the DO API endpoint.  In doctl this key will be placed in the process 
-// environment of the subprocess that runs the deployer.   If the deployer is invoked via nim rather than
-// doctl, the invoking context must set this key (e.g. in the API build container or for testing).
-//
-// If neither environment variable is set, then trigger operations are skipped (become no-ops).
-// Reasoning: the deployer should always be called by one of
-//   - doctl, which will always set DO_API_KEY
-//   - tests, which will knowingly set one of the two
-//   - the AP build container, which should have maximum flexibility to either (1) refuse to deploy if
-// the project has triggers, (2) set DO_API_KEY in the subprocess enviornment when invoking nim, (3)
-// proceed with a warning and without deploying triggers.
-// And, the list operation, at least, will be called routinely during cleanup operations and must be
-// able to act as a no-op (return the empty list) when triggers are not being used.
+// Note well: this code is prepared to succeed silently (no-op) in contexts where the authorization to
+// manage triggers is absent.  To make the code do something, the DO_API_KEY environment variable must be
+// set to the DO API key that should be used to contact the DO API endpoint.  In doctl, this key will be 
+// placed in the process environment of the subprocess that runs the deployer.   If the deployer is invoked
+// via nim rather than doctl, the invoking context must set this key (e.g. in the app platform build container
+// or for testing).
 
-import openwhisk from 'openwhisk'
 import { TriggerSpec, SchedulerSourceDetails, DeploySuccess } from './deploy-struct'
 import { default as axios, AxiosRequestConfig } from 'axios'
 import makeDebug from 'debug'
 const debug = makeDebug('nim:deployer:triggers')
-const usePrototype=process.env.TRIGGERS_USE_PROTOTYPE
 const doAPIKey=process.env.DO_API_KEY
 const doAPIEndpoint='https://api.digitalocean.com'
 
-export async function deployTriggers(triggers: TriggerSpec[], functionName: string, wsk: openwhisk.Client,
-    namespace: string): Promise<(DeploySuccess|Error)[]> {
+// Returns an array.  Elements are a either DeploySuccess structure for use in reporting when the trigger
+// is deployed successfully, or an Error if the trigger failed to deploy.  These are 1-1 with the input
+// triggers argument.
+export async function deployTriggers(triggers: TriggerSpec[], functionName: string, namespace: string): Promise<(DeploySuccess|Error)[]> {
   const result: (DeploySuccess|Error)[] = []
   for (const trigger of triggers) {
-    result.push(await deployTrigger(trigger, functionName, wsk, namespace))   
+    result.push(await deployTrigger(trigger, functionName, namespace))   
   }
   debug('finished deploying triggers, returning result')
   return result
 }
 
-export async function undeployTriggers(triggers: string[], wsk: openwhisk.Client, namespace: string): Promise<(Error|true)[]> {
-  const result: (Error|true)[] = []
+// Undeploy one or more triggers.  Returns the empty array on success.  Otherwise, the return
+// contains all the errors from attempted deletions.
+export async function undeployTriggers(triggers: string[], namespace: string): Promise<Error[]> {
+  const errors: any[] = []
   for (const trigger of triggers) {
     try {
-      await undeployTrigger(trigger, wsk, namespace)
-      result.push(true)
+      await undeployTrigger(trigger, namespace)
     } catch (err) {
-      // See comment in catch clause in deployTrigger
-      if (typeof err === 'string') {
-        result.push(Error(err))
-      } else {
-        result.push(err as Error)
-      }   
+      const msg = err.message ? err.message : err
+      errors.push(new Error(`unable to undeploy trigger '${trigger}': ${msg}`))   
     }
   }
-  return result
+  return errors
 }
 
 // Code to deploy a trigger.
 // Note that basic structural validation of each trigger has been done previously
 // so paranoid checking is omitted.
-async function deployTrigger(trigger: TriggerSpec, functionName: string, wsk: openwhisk.Client, namespace: string): Promise<DeploySuccess|Error> {
+async function deployTrigger(trigger: TriggerSpec, functionName: string, namespace: string): Promise<DeploySuccess|Error> {
   const details = trigger.sourceDetails as SchedulerSourceDetails
   const { cron, withBody } = details
-  const { sourceType, enabled } = trigger
-  const params = {
-    triggerName: trigger.name,
-    function: functionName,
-    sourceType,
-    cron,
-    withBody,
-    overwrite: true,
-    enabled
-  }
+  const { enabled } = trigger
   try {
-    if (!usePrototype && doAPIKey) {
-        // Call the real API
-        debug('calling the real trigger API to create %s', trigger.name)
+    if (doAPIKey) {
+        debug('calling the trigger API to create %s', trigger.name)
         return await doTriggerCreate(trigger.name, functionName, namespace, cron, enabled, withBody)
-    } else if (usePrototype) {
-        // Call the prototype API
-        await wsk.actions.invoke({
-          name: '/nimbella/triggers/create',
-          params,
-          blocking: true,
-          result: true
-        })
-        return { name: trigger.name, kind: 'trigger', skipped: false }
-    }
+    } // otherwise do nothing
   } catch (err) {
     debug('caught an error while deploying trigger; will return it')
     // Assume 'err' is either string or Error in the following.  Actually it can be anything but use of
@@ -155,22 +117,10 @@ async function doAxios(config: AxiosRequestConfig): Promise<object> {
 }
 
 // Code to delete a trigger.
-async function undeployTrigger(trigger: string, wsk: openwhisk.Client, namespace: string) {
+async function undeployTrigger(trigger: string, namespace: string) {
   debug('undeploying trigger %s', trigger)
-  if (doAPIKey && !usePrototype) {
-      // Use the real API
+  if (doAPIKey) {
       return doTriggerDelete(trigger, namespace)
-  } else if (usePrototype) {
-    // Prototype API
-    const params = {
-      triggerName: trigger
-    }
-    return await wsk.actions.invoke({
-      name: '/nimbella/triggers/delete',
-      params,
-      blocking: true,
-      result: true
-    })
   }
   // Else no-up.  A Promise<void> (non-error) is returned implicitly
 }
@@ -184,32 +134,17 @@ async function doTriggerDelete(trigger: string, namespace: string): Promise<obje
   return doAxios(config)
 }
 
-// Code to get all the triggers for a namespace, or all the triggers for a function in the
-// namespace.
-export async function listTriggersForNamespace(wsk: openwhisk.Client, namespace: string, fcn?: string): Promise<string[]> {
+// Code to get all the triggers for a namespace, or all the triggers for a function in the namespace.
+export async function listTriggersForNamespace(namespace: string, fcn?: string): Promise<string[]> {
   debug('listing triggers')
-  if (doAPIKey && !usePrototype) {
-    // Use the real API
+  if (doAPIKey) {
     return doTriggerList(namespace, fcn)
-  } else if (usePrototype) {
-    // Use the prototype API
-    const params: any = {
-      name: '/nimbella/triggers/list',
-      blocking: true,
-      result: true
-    }
-    if (fcn) {
-      params.params = { function: fcn }
-    }
-    const triggers: any = await wsk.actions.invoke(params)
-    debug('triggers listed')
-    return triggers.items.map((trigger: any) => trigger.triggerName)
   }
   // No-op if no envvars are set
   return []
 }
 
-// The following is my best guess on what the trigger list API is planning to return
+// The trigger list API returns this structure (abridged here to just what we care about)
 interface TriggerList {
   triggers: TriggerInfo[]
 }

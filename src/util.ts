@@ -1207,29 +1207,51 @@ function deployerAnnotationFromGithub(githubPath: string): DeployerAnnotation {
   return { digest: undefined, user: 'cloud', repository, projectPath: def.path, commit: def.ref || 'master' }
 }
 
-// Wipe all the entities from the namespace referred to by an OW client handle
+// Wipe all the entities from the namespace referred to by an OW client handle.
+// This is not guaranteed to succeed but it will attempt to wipe as much as possible,
+// returning all errors that occurred.  If an error occurs when removing a trigger that
+// is associated with a function, the function is not deleted.
 export async function wipe(client: Client): Promise<void> {
-  await wipeAll(client.actions, 'Action')
+  const errors: any[] = []
+  // Delete the actions, which will delete associated triggers if possible.  If a trigger
+  // cannot be deleted, the action is left also.
+  await wipeActions(client, errors)
   debug('Actions wiped')
-  await wipeAll(client.rules, 'Rule')
-  debug('Rules wiped')
-  await wipeAll(client.triggers, 'Trigger')
-  debug('OpenWhisk triggers wiped')
-  await wipeAll(client.packages, 'Package')
+  // Delete the packages.  Note that if an action deletion failed, the containing
+  // package will likely fail also.
+  await wipeAll(client.packages, 'Package', errors)
   debug('Packages wiped')
+  // There _could_ have been orphaned triggers that were not deleted when we
+  // deleted actions (since they were not connected to an existing action).
+  // On the other hand, if one or more triggers failed deletion before, they
+  // may fail again here, with duplicate errors.  We are tolerating that for the moment.
   const namespace = await getTargetNamespace(client)
-  const triggers = await listTriggersForNamespace(client, namespace)
-  if (triggers) {
-    debug('There are %d DigitalOcean triggers to remove', triggers.length)
-    await undeployTriggers(triggers, client, namespace)
-    // TODO errors are being fed back here but are currently ignored.  It is not completely
-    // clear what should be done with them.
+  const triggers = await listTriggersForNamespace(namespace, '')
+  const errs = await undeployTriggers(triggers, namespace)
+  if (errs.length > 0) {
+    errors.push(...errs)
+  }
+  // Delete rules and OpenWhisk triggers for good measure (there really shouldn't be any)
+  await wipeAll(client.rules, 'Rule', errors)
+  debug('Rules wiped')
+  await wipeAll(client.triggers, 'Trigger', errors)
+  debug('OpenWhisk triggers wiped')
+  // Determine if any errors occurred.  If so, throw them.  We have tried using AggregateError
+  // here but ran into perplexing problems.  So, using an ad hoc approach when combining errors.
+  if (errors.length > 1) {
+    const combined = Error('multiple errors occurred while cleaning the namespace') as any
+    combined.errors = errors
+    throw combined
+  } 
+  if (errors.length == 1){
+    throw errors[0]
   }
 }
 
-// Repeatedly wipe an entity (action, rule, trigger, or package) from the namespace denoted by the OW client until none are left
-// Note that the list function can only return 200 entities at a time)
-async function wipeAll(handle: any, kind: string) {
+// Repeatedly wipe an entity (rule, trigger, or package) from the namespace denoted by the OW client until none are left
+// Note that the list function can only return 200 entities at a time).
+// Actions are handled differently since they may have triggers associated with them.
+async function wipeAll(handle: any, kind: string, errors: any[]) {
   while (true) {
     const entities = await handle.list({ limit: 200 })
     if (entities.length === 0) {
@@ -1241,22 +1263,62 @@ async function wipeAll(handle: any, kind: string) {
       if (nsparts.length > 1) {
         name = nsparts[1] + '/' + name
       }
-      await handle.delete(name)
-      debug('%s %s deleted', kind, name)
+      try {
+        await handle.delete(name)
+        debug('%s %s deleted', kind, name)
+      } catch (err) {
+        debug('error deleting %s %s: %O', err)
+        errors.push(err)    
+      }
     }
   }
 }
 
-// Delete an action while also deleting any DigitalOcean triggers that are targetting it
-export async function deleteAction(actionName: string, owClient: Client): Promise<Action> {
-  // First delete the action itself.  If this fails it will throw.
-  // Save the action contents so they can be returned as a result.
-  const action = await owClient.actions.delete({ name: actionName})
-  // Delete associated triggers (if any)
+// Repeatedly wipe actions from the namespace denoted by the OW client until none are left.
+// Note that the list function can only return 200 actions at a time.  This is done
+// differently from the other entity types because actions can have associated triggers
+// which should be deleted first (with the action remaining if the trigger deletion fails).
+async function wipeActions(client: Client, errors: any[]) {
+  while (true) {
+    const actions = await client.actions.list({ limit: 200 })
+    if (actions.length === 0) {
+      return
+    }
+    for (const action of actions) {
+      let name = action.name
+      const nsparts = action.namespace.split('/')
+      if (nsparts.length > 1) {
+        name = nsparts[1] + '/' + name
+      }
+      const result = await deleteAction(name, client)
+      if (Array.isArray(result)) {
+        errors.push(...result)
+        debug('error deleting the triggers')
+      }
+      debug('action %s deleted', name)
+    }
+  }
+}
+
+// Delete an action after first deleting any DigitalOcean triggers that are targeting it.
+// If we can't delete the triggers, we don't delete the action (maintains the invariant that
+// a trigger should only exist if its invoked function also exists).  This function is not
+// intended to throw but to return errors in an array (either errors deleting triggers or an
+// error deleting the action).
+export async function deleteAction(actionName: string, owClient: Client): Promise<Action|Error[]> {
+  // Delete triggers.
   const namespace = await getTargetNamespace(owClient)
-  const triggers = await listTriggersForNamespace(owClient, namespace, actionName)
-  await undeployTriggers(triggers, owClient, namespace)
-  return action
+  const triggers = await listTriggersForNamespace(namespace, actionName)
+  const errs = await undeployTriggers(triggers, namespace)
+  if (errs.length > 0) {
+    return errs
+  }
+  try {
+    return await owClient.actions.delete({ name: actionName})
+  } catch (err) {
+    const msg = err.message ? err.message : err
+    return [ new Error(`unable to undeploy action '${actionName}': ${msg}`) ]   
+  }
 }
 
 // Generate a secret in the form of a random alphameric string (TODO what form(s) do we actually support)
