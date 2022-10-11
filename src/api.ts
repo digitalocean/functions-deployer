@@ -13,15 +13,14 @@
 
 // Contains the main public (library) API of the deployer (some exports in 'util' may also be used externally but are incidental)
 
-import { cleanOrLoadVersions, doDeploy, actionWrap, cleanPackage } from './deploy'
-import { DeployStructure, DeployResponse, PackageSpec, OWOptions, WebResource, Credentials, Flags, Includer, Feedback, DefaultFeedback } from './deploy-struct'
+import { cleanOrLoadVersions, doDeploy, cleanPackage } from './deploy'
+import { DeployStructure, DeployResponse, PackageSpec, OWOptions, Credentials, Flags, Includer, Feedback, DefaultFeedback } from './deploy-struct'
 import { readTopLevel, buildStructureParts, assembleInitialStructure } from './project-reader'
 import {
   isTargetNamespaceValid, wrapError, wipe, saveUsFromOurselves, writeProjectStatus, getTargetNamespace,
   checkBuildingRequirements, errorStructure, getBestProjectName, inBrowser, isRealBuild
 } from './util'
-import { openBucketClient } from './deploy-to-bucket'
-import { buildAllActions, buildWeb, maybeBuildLib } from './finder-builder'
+import { buildAllActions, maybeBuildLib } from './finder-builder'
 import openwhisk = require('openwhisk')
 import { getCredentialsForNamespace, getCredentials, Persister, recordNamespaceOwnership } from './credentials'
 import { makeIncluder } from './includer'
@@ -157,7 +156,6 @@ export async function readProject(projectPath: string, envPath: string, buildEnv
 // others are started.
 export async function buildProject(project: DeployStructure, runtimes: RuntimesConfig): Promise<DeployStructure> {
   debug('Starting buildProject with spec %O', project)
-  let webPromise: Promise<WebResource[]|Error>
   project.sharedBuilds = { }
   if (project.libBuild && isRealBuild(project.libBuild)) {
     try {
@@ -166,33 +164,8 @@ export async function buildProject(project: DeployStructure, runtimes: RuntimesC
       return errorStructure(err)
     }
   }
-  if (project.webBuild) {
-    webPromise = buildWeb(project, runtimes).catch(err => Promise.resolve(err))
-  }
   const actionPromise: Promise<PackageSpec[]> = buildAllActions(project, runtimes)
-  if (webPromise) {
-    if (actionPromise) {
-      return Promise.all([webPromise, actionPromise]).then(result => {
-        const [web, packages] = result
-        if (web instanceof Error) {
-          project.webBuildError = web
-        } else {
-          project.web = web
-        }
-        project.packages = packages
-        return project
-      }).catch(err => errorStructure(err))
-    } else {
-      return webPromise.then(web => {
-        if (web instanceof Error) {
-          project.webBuildError = web
-        } else {
-          project.web = web
-        }
-        return project
-      }).catch(err => errorStructure(err))
-    }
-  } else if (actionPromise) {
+  if (actionPromise) {
     return actionPromise.then(packages => {
       project.packages = packages
       return project
@@ -205,10 +178,8 @@ export async function buildProject(project: DeployStructure, runtimes: RuntimesC
 // Prepare a DeployStruct for deployment.
 // 1.  Ensure that we are using the right credentials
 // 2.  Merge credentials and user-specified OWOptions that were not necessarily part of the credentials.
-// 3.  Open the OW and bucket client handles to ensure they are valid before the (possibly extensive) build step is performed.
-//    Validation includes the optional check on the target namespace; even if it came from the credentials it might no longer be valid.
-// 4.  Do action wrapping of web resources.  This creates additional actions in the final deployment.  The original web resources
-//    are not deleted but are not deployed as such.
+// 3.  Open the OW client handle to ensure it is valid before the (possibly extensive) build step is performed.
+//   Validation includes the optional check on the target namespace; even if it came from the credentials it might no longer be valid.
 export async function prepareToDeploy(inputSpec: DeployStructure, owOptions: OWOptions, credentials: Credentials, persister: Persister,
   flags: Flags): Promise<DeployStructure> {
   debug('Starting prepare with spec: %O', inputSpec)
@@ -298,11 +269,6 @@ export async function prepareToDeploy(inputSpec: DeployStructure, owOptions: OWO
   inputSpec.flags = flags
   debug('Options merged')
   // 3.  Open handles
-  const needsBucket = inputSpec.web && inputSpec.web.length > 0 && !inputSpec.actionWrapPackage && !flags.webLocal
-  if (needsBucket && !credentials.storageKey) {
-    return errorStructure(new Error(
-      `Deployment of web content to namespace '${credentials.namespace}' requires file store access but is not enabled`))
-  }
   debug('Auth sufficiency established')
   inputSpec.owClient = openwhisk(wskoptions)
   if (!credentials.namespace) {
@@ -316,49 +282,8 @@ export async function prepareToDeploy(inputSpec: DeployStructure, owOptions: OWO
       `To deploy to namespace '${credentials.namespace}' on host '${credentials.ow.apihost}' you must specify the '--production' flag`))
   }
   debug('Sensitive project/namespace guard passed')
-  if (needsBucket) {
-    let error: Error
-    const bucketClient = await openBucketClient(credentials, inputSpec.bucket)
-      .catch(origError => {
-        debug('Error creating bucket client: %O', origError)
-        error = origError // Let it flow up to displayError where it will be improved
-        return undefined
-      })
-    if (error) {
-      return errorStructure(error)
-    }
-    inputSpec.bucketClient = bucketClient
-  }
-  debug('Bucket client created')
-  // 4.  Action wrapping
-  const { web, packages } = inputSpec
-  if (web && web.length > 0 && inputSpec.actionWrapPackage) {
-    try {
-      const wrapPackage = inputSpec.actionWrapPackage
-      const wrapping = web.map(res => {
-        if (!res.mimeType) {
-          throw new Error(`Could not deploy web resource ${res.filePath}; mime type cannot be determined`)
-        }
-        return actionWrap(res, inputSpec.reader, wrapPackage)
-      })
-      return Promise.all(wrapping).then(wrapped => {
-        // If wrapPackage is already in the inputSpec, add the new actions to it.  Otherwise, make a new PackageSpec
-        const existing: PackageSpec[] = packages.filter(pkg => pkg.name === wrapPackage)
-        if (existing.length === 0) {
-          packages.push({ name: wrapPackage, actions: wrapped, shared: false })
-        } else {
-          const modified = existing[0].actions.concat(wrapped)
-          existing[0].actions = modified
-        }
-        return inputSpec
-      })
-    } catch (err) {
-      return errorStructure(err)
-    }
-  } else {
-    debug('returning spec %O', inputSpec)
-    return Promise.resolve(inputSpec)
-  }
+  debug('returning spec %O', inputSpec)
+  return Promise.resolve(inputSpec)
 }
 
 // Utility to convert errors into useful messages.   Usually, this just means getting the message field from the error but there

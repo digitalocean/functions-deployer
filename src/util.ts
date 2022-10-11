@@ -13,7 +13,7 @@
 
 import {
   DeployStructure, DeployResponse, DeploySuccess, DeployKind, ActionSpec, PackageSpec, Feedback,
-  DeployerAnnotation, WebResource, VersionMap, VersionEntry, BucketSpec, PathKind, ProjectReader, KeyVal
+  DeployerAnnotation, VersionMap, VersionEntry, PathKind, ProjectReader, KeyVal
 } from './deploy-struct'
 import { getUserAgent } from './api'
 import { XMLHttpRequest } from 'xmlhttprequest'
@@ -23,8 +23,6 @@ import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
 import simplegit from 'simple-git'
-import * as mime from 'mime-types'
-import * as mimedb from 'mime-db'
 import * as randomstring from 'randomstring'
 import * as crypto from 'crypto'
 import * as yaml from 'js-yaml'
@@ -179,9 +177,6 @@ export async function checkBuildingRequirements(todeploy: DeployStructure, reque
       throw new Error(`Local building required but cannot occur in the workbench; use the CLI (${tag})`)
     }
   }
-  if (todeploy.bucket) {
-    checkConflicts(todeploy.webBuild, todeploy.bucket.remoteBuild, todeploy.bucket.localBuild, 'web')
-  }
   if (todeploy.packages) {
     for (const pkg of todeploy.packages) {
       if (pkg.actions) {
@@ -191,9 +186,7 @@ export async function checkBuildingRequirements(todeploy: DeployStructure, reque
       }
     }
   }
-  const webRequiresLocal = (todeploy.bucket && todeploy.bucket.localBuild) || !!todeploy.actionWrapPackage
-  todeploy.webBuild = locateBuild(todeploy.webBuild, requestRemote, false, todeploy.bucket && todeploy.bucket.remoteBuild, webRequiresLocal)
-  let needsLocal = todeploy.webBuild !== 'remote' && isRealBuild(todeploy.webBuild)
+  let needsLocal = false
   if (todeploy.packages) {
     for (const pkg of todeploy.packages) {
       if (pkg.actions) {
@@ -269,25 +262,7 @@ function removeEmptyStringMembers(config: DeployStructure) {
   if (config.targetNamespace && config.targetNamespace === '') {
     delete config.targetNamespace
   }
-  if (config.actionWrapPackage && config.actionWrapPackage === '') {
-    delete config.targetNamespace
-  }
-  removeEmptyStringMembersFromBucket(config.bucket)
   removeEmptyStringMembersFromPackages(config.packages)
-}
-
-// Remove empty optional string-valued members from a bucket spec
-function removeEmptyStringMembersFromBucket(bucket: BucketSpec) {
-  if (!bucket) return
-  if (bucket.mainPageSuffix && bucket.mainPageSuffix === '') {
-    delete bucket.mainPageSuffix
-  }
-  if (bucket.notFoundPage && bucket.notFoundPage === '') {
-    delete bucket.notFoundPage
-  }
-  if (bucket.prefixPath && bucket.prefixPath === '') {
-    delete bucket.prefixPath
-  }
 }
 
 // Remove empty optional string-valued members from an array of PackageSpecs
@@ -307,10 +282,8 @@ function removeEmptyStringMembersFromPackages(packages: PackageSpec[]) {
   }
 }
 
-// Validation for DeployStructure read from disk.  Note: this may be any valid DeployStructure except that the strays member
-// is not expected in this context.  TODO return a list of errors not just the first error.
+// Validation for DeployStructure read from disk.
 export function validateDeployConfig(arg: any, runtimesConfig: RuntimesConfig): string {
-  let haveActionWrap = false; let haveBucket = false
   const isNimbellaDeploy = arg.targetNamespace === 'nimbella'
   const slice = !!arg.slice
   for (const item in arg) {
@@ -329,18 +302,6 @@ export function validateDeployConfig(arg: any, runtimesConfig: RuntimesConfig): 
         }
         break
       }
-      case 'web': {
-        if (!Array.isArray(arg[item])) {
-          return 'web member must be an array'
-        }
-        for (const subitem of arg[item]) {
-          const webError = validateWebResource(subitem)
-          if (webError) {
-            return webError
-          }
-        }
-        break
-      }
       case 'packages': {
         if (!Array.isArray(arg[item])) {
           return 'packages member must be an array'
@@ -350,21 +311,6 @@ export function validateDeployConfig(arg: any, runtimesConfig: RuntimesConfig): 
           if (pkgError) {
             return pkgError
           }
-        }
-        break
-      }
-      case 'actionWrapPackage': {
-        if (!(typeof arg[item] === 'string')) {
-          return `${item} member must be a string`
-        }
-        haveActionWrap = arg[item].length > 0
-        break
-      }
-      case 'bucket': {
-        haveBucket = true
-        const optionsError = validateBucketSpec(arg[item])
-        if (optionsError) {
-          return optionsError
         }
         break
       }
@@ -386,9 +332,6 @@ export function validateDeployConfig(arg: any, runtimesConfig: RuntimesConfig): 
         return `Invalid key '${item}' found in project.yml`
     }
   }
-  if (haveActionWrap && haveBucket) {
-    return 'At most one of actionWrapPackage and bucket may be specified (config specifies both)'
-  }
   return undefined
 }
 
@@ -400,54 +343,6 @@ function isDictionary(item: any) {
 // Test whether an item is an Ownership.  This means it's a dictionary and has 'production' and/or 'test' string members
 function isValidOwnership(item: any): boolean {
   return isDictionary(item) && (typeof item.production === 'string' || typeof item.test === 'string')
-}
-
-// Validator for BucketSpec
-function validateBucketSpec(arg: Record<string, any>): string {
-  for (const item in arg) {
-    switch (item) {
-      case 'prefixPath':
-      case 'mainPageSuffix':
-      case 'notFoundPage':
-        if (!(typeof arg[item] === 'string')) {
-          return `'${item}' member of 'bucket' must be a string`
-        }
-        break
-      case 'strip':
-        if (!(typeof arg[item] === 'number')) {
-          return `'${item}' member of 'bucket' must be a number`
-        }
-        break
-      case 'clean':
-      case 'useCache':
-      case 'remoteBuild':
-      case 'localBuild':
-        if (!(typeof arg[item] === 'boolean')) {
-          return `'${item}' member of 'bucket' must be a boolean`
-        }
-        break
-      default:
-        return `Invalid key '${item}' found in 'bucket' in project.yml`
-    }
-  }
-  return undefined
-}
-
-// Validator for a WebResource
-function validateWebResource(arg: Record<string, any>): string {
-  for (const item in arg) {
-    switch (item) {
-      case 'simpleName':
-      case 'mimeType':
-        break
-      default:
-        return `Invalid key '${item}' found in 'web' in project.yml`
-    }
-    if (!(typeof arg[item] === 'string')) {
-      return `'${item}' member of a 'web' must be a string`
-    }
-  }
-  return undefined
 }
 
 // Validator for a PackageSpec
@@ -754,7 +649,7 @@ export function makeDict(keyVal: KeyVal[]): Dict {
 
 // Provide an empty DeployStructure with all array and object members defined but empty
 export function emptyStructure(): DeployStructure {
-  return { web: [], packages: [], strays: [] }
+  return { packages: [], strays: [] }
 }
 
 // Provide an empty DeployStructure that records an error
@@ -1080,48 +975,6 @@ function getPropsFromFile(filePath: string): Record<string, string> {
   const propParser = require('dotenv')
   // The dotenv parser doesn't throw but returns the empty object if malformed
   return propParser.parse(contents)
-}
-
-// Convert an array of names to an array of WebResources.
-export function convertToResources(names: string[], dropInitial: number): WebResource[] {
-  return names.map(filePath => {
-    const simpleName = filePath.substring(dropInitial)
-    const mimeType = mime.lookup(simpleName) || undefined
-    return { filePath, simpleName, mimeType }
-  })
-}
-
-// Determine if a mime type is a "text" type (non-binary), should not be base64 encoded in the final html)
-let binaryMimeTypes: Set<string>
-
-export function isTextType(mimeType: string): boolean {
-  if (!binaryMimeTypes) {
-    binaryMimeTypes = loadBinaryMimeTypes()
-  }
-  return binaryMimeTypes ? !binaryMimeTypes.has(mimeType) : true // If we aren't sure it's binary, consider it text
-}
-
-// Load the binary mimetypes.  We remember the binary ones rather than the text ones because we expect they are fewer in number
-function loadBinaryMimeTypes(): Set<string> {
-  const db: mimedb.MimeDatabase = require('mime-db')
-  const entries = Object.entries(db)
-  const ans = new Set<string>()
-  entries.forEach(entry => {
-    if (entry[1].compressible === false) { // only consider false if explicitly (boolean) false ... default if omitted is true
-      ans.add(entry[0])
-    }
-  })
-  debug('%d binary mime-types were found in the database', ans.size)
-  return ans
-}
-
-// Convert an array of pairs with old and new names to an array of WebResources, where the new name is (in general) a truncation of the old name
-export function convertPairsToResources(pairs: string[][]): WebResource[] {
-  return pairs.map(pair => {
-    const [filePath, simpleName] = pair
-    const mimeType = mime.lookup(simpleName) || undefined
-    return { filePath, simpleName, mimeType }
-  })
 }
 
 // Types for the map versions of the PackageSpec and ActionSpec types

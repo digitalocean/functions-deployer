@@ -12,10 +12,10 @@
  */
 
 import { spawn } from 'child_process'
-import { DeployStructure, ActionSpec, PackageSpec, WebResource, BuildTable, Flags, ProjectReader, PathKind, 
-  Credentials, Feedback } from './deploy-struct'
+import { DeployStructure, ActionSpec, PackageSpec, BuildTable, Flags, ProjectReader, PathKind, 
+  Feedback } from './deploy-struct'
 import {
-  actionFileToParts, filterFiles, mapPackages, mapActions, convertToResources, convertPairsToResources,
+  actionFileToParts, filterFiles, mapPackages, mapActions,
   promiseFilesAndFilterFiles, agreeOnRuntime, getBestProjectName, getExclusionList, waitForActivation,
   getActionName
 } from './util'
@@ -407,14 +407,14 @@ export function getBuildForLibOrWeb(filepath: string, reader: ProjectReader, lib
 
 // Build the lib directory only if appropriate.  It is appropriate to build it
 // if (1) we are deploying a slice ("already running remotely") or (2) there is
-// some action (or web content) that will be deployed locally.  In other words,
+// some action that will be deployed locally.  In other words,
 // we do _not_ build lib in the case where this deployment is running locally but
 // everything will in fact be deployed remotely.
 export async function maybeBuildLib(spec: DeployStructure): Promise<void> {
   function isRemote(build: string): boolean {
     return build === 'remote' || build === 'remote-default'
   }
-  let shouldBuild = spec.slice || (spec.webBuild && !isRemote(spec.webBuild))
+  let shouldBuild = spec.slice
   if (!shouldBuild && spec.packages) {
     pkgLoop: for (const pkg of spec.packages) {
       if (pkg.actions) {
@@ -450,36 +450,6 @@ export async function maybeBuildLib(spec: DeployStructure): Promise<void> {
   }
 }
 
-export function buildWeb(spec: DeployStructure, runtimes: RuntimesConfig): Promise<WebResource[]> {
-  debug('Performing Web build')
-  let scriptPath: string
-  const displayPath = path.join(getBestProjectName(spec), 'web')
-  const { reader, flags, feedback, sharedBuilds, webBuild, slice, buildEnv } = spec
-  switch (webBuild) {
-  case 'build.sh':
-    scriptPath = makeLocal(reader, 'web')
-    return scriptBuilder('./build.sh', scriptPath, displayPath, flags, buildEnv, slice, feedback).then(() => identifyWebFiles('web', reader))
-  case 'build.cmd':
-    debug('cwd for windows build is %s', 'web')
-    scriptPath = makeLocal(reader, 'web')
-    return scriptBuilder('build.cmd', scriptPath, displayPath, flags, buildEnv, slice, feedback).then(() => identifyWebFiles('web', reader))
-  case '.build':
-    // Does its own localizing
-    return outOfLineBuilder('web', displayPath, sharedBuilds, false, flags, buildEnv, slice, reader, feedback).then(() => identifyWebFiles('web', reader))
-  case 'package.json':
-    scriptPath = makeLocal(reader, 'web')
-    return npmBuilder(scriptPath, displayPath, flags, buildEnv, slice, feedback).then(() => identifyWebFiles('web', reader))
-  case '.include':
-  case 'identify':
-    return identifyWebFiles('web', reader)
-  case 'remote':
-    checkBuiltLocally(reader, 'web')
-    return doRemoteWebBuild(spec, runtimes)
-  default:
-    throw new Error('Unknown build type for web directory: ' + webBuild)
-  }
-}
-
 // Check whether path seems to denote a directory that is already built (heuristic).  Throws if case detected
 function checkBuiltLocally(reader: ProjectReader, localPath: string) {
   const loc = reader.getFSLocation()
@@ -499,40 +469,6 @@ function checkBuiltLocally(reader: ProjectReader, localPath: string) {
     debug('did not find %s or %s', zipped, dotBuilt)
   }
   debug('checkBuiltLocally passed')
-}
-
-// Identify the files constituting web content.  Similar to its action counterpart but not identical (e.g. there is no zipping)
-// For web content, we also fail the deployment if there are node_modules inclusions but no .include directive.  That
-// is usually an error.  In case it is not, the user can indicate it's ok by adding an .include that lists node_modules explicitly.
-async function identifyWebFiles(filepath: string, reader: ProjectReader): Promise<WebResource[]> {
-  debug('Identifying web files')
-  const includesPath = path.join(filepath, '.include')
-  if (await reader.isExistingFile(includesPath)) {
-    // If there is .include, it defines what to include and we need not look elsewhere
-    debug('processing .include')
-    return processInclude(includesPath, filepath, reader, true).then(pairs => convertPairsToResources(pairs))
-  }
-  debug('Processing web files using .ignore')
-  // Otherwise, we take the contents modulo the ignores
-  return getIgnores(filepath, reader).then(ignore => {
-    debug('processing .ignore and/or ignore rules')
-    return promiseFilesAndFilterFiles(filepath, reader).then((items: string[]) => {
-      items = applyIgnores(filepath, items, ignore)
-      checkForNodeModules(items)
-      debug(`Converting ${items.length} items to resources`)
-      return convertToResources(items, filepath.length + 1)
-    })
-  })
-}
-
-// Fail the deployment if there are node_modules items about to be deployed to the web.  This
-// is called only when there is no `.include` directive.
-function checkForNodeModules(items: string[]) {
-  items.forEach(item => {
-    if (item.includes('node_modules')) {
-      throw new Error('Deploying \'node_modules\' to the web, which is probably an error.  Use \'.include\' or \'.ignore\' to avoid this problem.')
-    }
-  })
 }
 
 // Check that all include file items resolve to "legal" places (inside the directory being built or a 'lib' directory at project root)
@@ -608,7 +544,7 @@ async function doRemoteActionBuild(action: ActionSpec, project: DeployStructure,
   debug('outputPromise settled for project slice of action %s', getActionName(action))
   const toSend = (output as memoryStreams.WritableStream).toBuffer()
   debug('sending the remote build request for project %s and action %s', project.filePath, actionName)
-  action.buildResult = await invokeRemoteBuilder(toSend, project.credentials, project.owClient, project.feedback, runtimes, action)
+  action.buildResult = await invokeRemoteBuilder(toSend, project.owClient, project.feedback, runtimes, action)
   return action
 }
 
@@ -693,30 +629,6 @@ async function appendAndCheck(zip: archiver.Archiver, file: string, actionPath: 
   zipDebug("zipped '%s' for remote build slice", file)
 }
 
-// Initiate request to builder for building web content
-async function doRemoteWebBuild(project: DeployStructure, runtimes: RuntimesConfig) {
-  // Check that a remote build is supportable
-  await checkRemoteBuildPreReqs('web', project, true)
-  // Get the zipper
-  const { zip, output, outputPromise } = makeProjectSliceZip('web content')
-  // Get the project slice in convenient form
-  const spec = makeConfigFromWebSpec(project)
-  // Zip the web path
-  await appendToZip(zip, 'web', project.reader, undefined, runtimes)
-  // Add 'lib' if it is present
-  if (project.libBuild) {
-    await appendLibToZip(zip, 'lib', project.reader)
-  }
-  // Add the project.yml
-  const config = yaml.safeDump(spec)
-  zip.append(config, { name: 'project.yml' })
-  zip.finalize()
-  await outputPromise
-  const toSend = (output as memoryStreams.WritableStream).toBuffer()
-  project.webBuildResult = await invokeRemoteBuilder(toSend, project.credentials, project.owClient, project.feedback, runtimes)
-  return [] // An array of WebResource is expected but since no deployment will be done locally an empty one suffices
-}
-
 // Slice the project to contain only one ActionSpec and no web folder; return a DeployStructure that can be written
 // out as a project.yml and also the path to the action file or directory, for zipping.
 function makeConfigFromActionSpec(action: ActionSpec, spec: DeployStructure, pkgName: string): DeployStructure {
@@ -747,16 +659,6 @@ function makeConfigFromActionSpec(action: ActionSpec, spec: DeployStructure, pkg
   pkg.deployedDuringBuild = false
   newSpec.packages = [pkg]
   return newSpec
-}
-
-// Slice the project to contain only components relevant ot web deploy.  This does not include 'web' itself since that will be
-// included in the project slice separately
-function makeConfigFromWebSpec(project: DeployStructure): DeployStructure {
-  debug('converting project spec to sliced project.yml for web building')
-  const { targetNamespace, cleanNamespace, bucket, credentials, flags, deployerAnnotation, buildEnv } = project
-  flags.remoteBuild = false
-  flags.buildEnv = undefined
-  return removeUndefined({ targetNamespace, cleanNamespace, bucket, credentials, flags, deployerAnnotation, buildEnv, slice: true })
 }
 
 // Remove undefined fields from object (mutates object but returns it as well)
@@ -819,48 +721,6 @@ export function getRemoteBuildName(): string {
   return `${BUCKET_BUILDER_PREFIX}/${buildName}`
 }
 
-// Invoke the remote build the traditional way, using the data bucket and assuming there are storage credentials
-async function legacyRemoteBuilder(zipped: Buffer, owClient: openwhisk.Client, feedback: Feedback, runtimes: RuntimesConfig, action?: ActionSpec): Promise<string> {
-  // Upload project slice to the user's data bucket
-  const remoteName = getRemoteBuildName()
-  const urlResponse = await owClient.actions.invoke({
-    name: '/nimbella/websupport/getSignedUrl',
-    params: { fileName: remoteName, dataBucket: true },
-    blocking: true,
-    result: true
-  })
-  const url = urlResponse.url
-  if (!url) {
-    throw new Error(`Response from getSignedUrl was not a URL: ${urlResponse}`)
-  }
-  debug('remote build url is %s', url)
-  const result = await axios.put(url, zipped)
-  if (result.status !== 200) {
-    throw new Error(`Bad response [$result.status}] when uploading '${remoteName}' for remote build`)
-  }
-  debug('axios put of url was successful')
-  // Invoke the remote builder action.  The action name incorporates the runtime 'kind'.
-  // That action will re-invoke the nim deployer in the target runtime.
-  const kind = action ? action.runtime : 'nodejs:default'
-  const activityName = action ? `action '${getActionName(action)}'` : 'web content'
-  const runtime = canonicalRuntime(runtimes, kind).replace(':', '_')
-  const buildActionName = `${BUILDER_ACTION_STEM}${runtime}`
-  debug(`Invoking remote build action '${buildActionName}' for build '${path.basename(remoteName)} of ${activityName}`)
-  try {
-    const invoked = await owClient.actions.invoke({ name: buildActionName, params: { toBuild: remoteName } })
-    feedback.progress(`Submitted ${activityName} for remote building and deployment in runtime ${kind}`)
-    return invoked.activationId
-  } catch (err) {
-    if (err.statusCode === 404) {
-      throw new Error(`Remote build service is not available for runtime '${kind}' on this platform instance.`)
-    } else if (err.statusCode >= 500 && err.statusCode <= 599) {
-      throw new Error('Remote build service returned error status.')
-    } else {
-      throw err
-    }
-  }
-}
-
 // Computes the tag to be added to a remote build slice name.  Should be a function of the
 // qualified action name (pkg/action) but with / replaced by _.  Also, if there is no
 // action spec we assume this is a remote web build and use the string 'web'
@@ -910,12 +770,7 @@ async function getUploadUrl(owClient: openwhisk.Client, params: { action: string
 }
  
 // Invoke the remote builder, return the response.  The 'action' argument is omitted for web builds
-async function invokeRemoteBuilder(zipped: Buffer, credentials: Credentials, owClient: openwhisk.Client, feedback: Feedback, runtimes: RuntimesConfig, action?: ActionSpec): Promise<string> {
-  if (credentials.storageKey) {
-    // For now, we assume that if a storage key is present, then the data bucket should be used in the
-    // traditional way.
-    return legacyRemoteBuilder(zipped, owClient, feedback, runtimes, action)
-  } // otherwise, we follow the new path using a protected build bucket
+async function invokeRemoteBuilder(zipped: Buffer, owClient: openwhisk.Client, feedback: Feedback, runtimes: RuntimesConfig, action?: ActionSpec): Promise<string> {
   // Upload project slice
   const params = { action: computeTag(action) }
   debug(`Invoking 'getUploadUrl'`)

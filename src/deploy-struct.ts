@@ -12,27 +12,10 @@
  */
 
 import { Dict, Client, Limits, KeyVal as OWKeyVal } from 'openwhisk'
-import { StorageClient } from '@nimbella/storage'
 
 // Contains the primary type definition for the deployer structure.
 // The structure consists of the contents of a 'project' (its file and folder structure) along
 // with the contents of a distinguished config file in the root of the project, if present.
-
-// The substructure for a web resource.
-export interface WebResource {
-    // The name of the resource relative to the web directory.  Used as a key when merging a WebResource in the config
-    // with one constructed from the project contents.  For action-wrapping, the simpleName must be simple (no slashes).
-    // For bucket deployment all valid path names are accepted.
-    simpleName: string
-    // The complete path to the resource within the project, for reading and deployment.  This is computed from the
-    // simpleName once the project location is known and should not be specified in the config.
-    filePath?: string
-    // The mime-type of the resource (generally inferred from its extension but can be specified explicitly in the config)
-    // The mime-type is only required when action-wrapping.
-    mimeType?: string
-    // Build information (not specifiable in the config)
-    build?: string
-}
 
 // Describes one package containing zero or more actions
 export interface PackageSpec {
@@ -106,7 +89,6 @@ export interface Flags {
     yarn: boolean
     env: string|undefined
     buildEnv: string|undefined
-    webLocal: string|undefined
     include: string|undefined
     exclude: string|undefined
     remoteBuild: boolean
@@ -148,12 +130,9 @@ export class DefaultFeedback implements Feedback {
 // describes the syntax of project.yml and also the structure of a project on disk (where 'web' and 'packages') are
 // subdirectories of the project).   The two sources of information are merged.
 export interface DeployStructure {
-    web?: WebResource[] // Resources found in the web directory
     packages?: PackageSpec[] // The packages found in the package directory
     targetNamespace?: string | Ownership // The namespace to which we are deploying.  An 'Ownership' implies ownership by the project
     cleanNamespace?: boolean // Clears entire namespace prior to deploying
-    bucket?: BucketSpec // Information guiding deployment of web resources into an s3 (or s3-like) object store bucket
-    actionWrapPackage?: string // The name of a package into which web resources will be action-wrapped.
     parameters?: Dict // Parameters to apply to all packages in the project
     environment?: Dict // Environment to apply to all packages in the project
     // The following fields are not documented for inclusion project.yml but may be present in a project slice config (remote build)
@@ -164,22 +143,18 @@ export interface DeployStructure {
     deployerAnnotation?: DeployerAnnotation // The deployer annotation to use (with the digest undefined, as it varies)
     buildEnv?: Record<string,string> // Build time environment
     // The following fields are never permitted in project.yml but are always added internally
-    webBuild?: string // Type of build (build.sh or package.json) to apply to the web directory
     libBuild?: string // Type of build (build.sh or package.json) to apply to the lib directory
     sharedBuilds?: BuildTable // The build table for this project, populated as shared builds are initiated
     strays?: string[] // files or directories found in the project that don't fit the model, not necessarily an error
     filePath?: string // The location of the project on disk
     githubPath?: string // The original github path specified, if deploying from github
     owClient?: Client // The openwhisk client for deploying actions and packages
-    bucketClient?: StorageClient // The client for deploying to a bucket
     includer?: Includer // The 'includer' for deciding which packages, actions, web are included in the deploy
     reader?: ProjectReader // The project reader to use
     versions?: VersionEntry // The VersionEntry for credentials.namespace on the selected API host if available
     feedback?: Feedback // The object to use for immediate communication to the user (e.g. for warnings and progress reports)
     error?: Error // Records an error in reading or preparing, or a terminal error in building; the structure should not be used
     unresolvedVariables?: string[] // Variables that couldn't be resolved in project reading (error may be set also)
-    webBuildError?: Error // Indicates an error in building the web component; the structure is usable but the failure should be reported
-    webBuildResult?: string // activation id of remote build
     sequences?: ActionSpec[] // detected during action deployment and deferred until ordinary actions are deployed
 }
 
@@ -189,18 +164,6 @@ export interface Ownership {
     test?: string
     production?: string
 }
-
-// The specification of information guiding bucket deployment of web resources if that feature is to be employed
-export interface BucketSpec {
-    prefixPath?: string // A directory prefix used in front of every resource when deploying (if absent, / is assumed)
-    strip?: number // The number of path segments to strip from every resource when deploying (before adding prefix path, if any)
-    mainPageSuffix?: string // The suffix to append to any directory URL (including the bucket root) to form the URL of a web page (defaults to 'index.html')
-    notFoundPage?: string // The name of a page (relative to the root) to show on 404 errors.
-    clean?: boolean // Deletes existing content starting at prefixPath (or the root if no prefixPath) before deploying new content
-    useCache?: boolean // If true, default cacheing (one hour) is enabled.  Otherwise a Cache-Control header of `no-cache` is set
-    remoteBuild?: boolean // States that the build (if any) must be done remotely
-    localBuild?: boolean // States that the build (if any) must be done locally (precludes a github deploy in the cloud)
- }
 
 // Types used in the DeployResponse
 export interface VersionInfo {
@@ -328,30 +291,22 @@ export interface CredentialNSMap {
 // we assume that a user keeps only one credential set for that namespace.
 export interface CredentialEntry {
     api_key: string
-    storageKey: any
-    redis: boolean
     project?: string
     production?: boolean
-    commander?: Record<string, unknown>
 }
 
 // The Result of a credential lookup
 export interface Credentials {
     namespace: string|undefined
     ow: OWOptions
-    storageKey: any
-    redis: boolean
     project?: string
     production?: boolean
-    commander?: Record<string, unknown>
 }
 
 // Compact and less complete information about a Credential suitable for listing and tabular display
 export interface CredentialRow {
     namespace: string
     current: boolean
-    storage: boolean
-    redis: boolean
     project?: string
     production?: boolean
     apihost: string
@@ -359,7 +314,6 @@ export interface CredentialRow {
 
 // The Includer object is used during project reading and deployment to screen web, packages, and actions to be included
 export interface Includer {
-    isWebIncluded: boolean
     isPackageIncluded: (pkg: string, all: boolean) => boolean
     isActionIncluded: (pkg: string, action: string) => boolean
     isIncludingEverything: () => boolean

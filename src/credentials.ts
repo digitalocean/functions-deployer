@@ -20,7 +20,6 @@ import {
 } from './deploy-struct'
 import createDebug from 'debug'
 import { wskRequest, setInBrowserFlag } from './util'
-import { getStorageProvider, StorageKey } from '@nimbella/storage'
 const debug = createDebug('nimbella.cli')
 
 // Non-exported constants
@@ -84,11 +83,10 @@ export function addCredential(store: CredentialStore, apihost: string, namespace
     nsMap = {}
     store.credentials[apihost] = nsMap
   }
-  const storageKey = storage ? parseStorageString(storage, namespace) : undefined
-  nsMap[namespace] = { api_key, storageKey, redis }
+  nsMap[namespace] = { api_key }
   store.currentHost = apihost
   store.currentNamespace = namespace
-  return { namespace, ow: { apihost, api_key }, storageKey, redis }
+  return { namespace, ow: { apihost, api_key }}
 }
 
 // Remove a namespace from the credential store
@@ -151,20 +149,10 @@ export async function switchNamespace(namespace: string, apihost: string | undef
 // If the environment is inadequate to support this API, an error is generally not indicated.  Instead,
 // an incomplete Credentials object is returned.
 export function getCredentialsFromEnvironment(): Credentials {
-  const storeCreds = process.env.__NIM_STORAGE_KEY
   const apihost = process.env.__OW_API_HOST
   const namespace = process.env.__OW_NAMESPACE
   const api_key = process.env.__OW_API_KEY
-  const redis = !!process.env.__NIM_REDIS_PASSWORD
-  let storageKey
-  if (storeCreds) {
-    try {
-      storageKey = parseStorageString(storeCreds, namespace)
-    } catch (_) {
-      // Assume no storage if can't be parsed
-    }
-  }
-  return { namespace, ow: { api_key, apihost }, redis, storageKey }
+  return { namespace, ow: { api_key, apihost }}
 }
 
 // Get the credentials for a namespace.  Similar logic to switchNamespace but does not change which
@@ -182,8 +170,8 @@ export async function getCredentials(persister: Persister): Promise<Credentials>
     throw new Error("You do not have a current namespace.  Use 'nim auth login' to create a new one or 'nim auth switch' to use an existing one")
   }
   const entry = store.credentials[store.currentHost][store.currentNamespace]
-  const { storageKey, api_key, redis, project, production, commander } = entry
-  return { namespace: store.currentNamespace, ow: { apihost: store.currentHost, api_key }, storageKey, redis, project, production, commander }
+  const { api_key, project, production } = entry
+  return { namespace: store.currentNamespace, ow: { apihost: store.currentHost, api_key }, project, production }
 }
 
 // Convenience function to load, add, save a new credential.  Includes check for whether an entry would be replaced.
@@ -192,9 +180,6 @@ export async function addCredentialAndSave(apihost: string, auth: string, storag
   const credStore = await persister.loadCredentialStore()
   const nsPromise = namespace ? Promise.resolve(namespace) : getNamespace(apihost, auth)
   return nsPromise.then(namespace => {
-    if (!allowReplacement && wouldReplace(credStore, apihost, namespace, auth)) {
-      throw new Error(`Existing credentials for namespace '${namespace}' cannot be replaced using '--auth'.  To replace it, logout first, or login without '--auth'`)
-    }
     const credentials = addCredential(credStore, apihost, namespace, auth, storage, redis)
     persister.saveCredentialStore(credStore)
     return credentials
@@ -228,9 +213,8 @@ export async function getCredentialDict(persister: Persister): Promise<{ [host: 
     let rows: CredentialRow[] = []
     for (const namespace in store.credentials[apihost]) {
       const current = apihost === store.currentHost && namespace === store.currentNamespace
-      const storage = !!store.credentials[apihost][namespace].storageKey
-      const { redis, project, production } = store.credentials[apihost][namespace]
-      rows.push({ namespace, current, storage, apihost, redis, project, production })
+      const { project, production } = store.credentials[apihost][namespace]
+      rows.push({ namespace, current, apihost, project, production })
       rows = rows.sort((a, b) => a.namespace.localeCompare(b.namespace))
     }
     result[apihost] = rows
@@ -333,23 +317,6 @@ function initialCredentialStore(): CredentialStore {
   return { currentHost: undefined, currentNamespace: undefined, credentials: {} }
 }
 
-// Determine if a new namespace/auth pair would replace an entry with the same pair that has storage or redis.
-// This is allowed for "high level" logins where the information is presumably coming via a token or oauth flow or via
-// `nimadmin user set`.   This checking function is not called in those cases.
-// However, "low level" logins by customers are given an informational message and the entry is not replaced.
-// This is to guard against surprising lossage of storage or redis information since a low level login with
-// --auth does not have that information.   A customer can still replace the entry for a namespace if he
-// provides a _different_ auth.  There's still a possibility of error, then, but the "error" would be
-// explainable and not surprising.  We allow this case because our own test projects routinely change the
-// key of 'nimbella' which is first set with a low-level login.
-function wouldReplace(store: CredentialStore, apihost: string, namespace: string, auth: string): boolean {
-  const existing = store.credentials[apihost] ? store.credentials[apihost][namespace] : undefined
-  if (!existing || (!existing.storageKey && !existing.redis)) {
-    return false
-  }
-  return auth === existing.api_key
-}
-
 // Write ~/.nimbella/wskprops.  Used when the default api host or api key change (TODO: this never saves the 'insecure' flag; that should
 // probably be correlated with the api host)
 function saveWskProps(apihost: string, auth: string) {
@@ -387,40 +354,9 @@ function getUniqueCredentials(namespace: string, apihost: string | undefined, st
       throw new Error(`The namespace '${namespace}' exists on more than one API host.  An '--apihost' argument is required`)
     }
   }
-  const { storageKey, api_key, redis, project, production, commander } = credentialEntry
+  const { api_key, project, production } = credentialEntry
   debug('have authkey: %s', api_key)
-  return { namespace, ow: { apihost: newHost, api_key }, storageKey, redis, project, production, commander }
-}
-
-// Turn a raw storage string into the form used internally.
-function parseStorageString(storage: string, namespace: string): StorageKey {
-  if (storage === 'yes') {
-    throw new Error(`Storage was not fully initialized for namespace '${namespace}'`)
-  }
-  let parsedStorage
-  try {
-    parsedStorage = JSON.parse(storage)
-  } catch {
-    throw new Error(`Corrupt storage string for namespace '${namespace}'`)
-  }
-  const provider = getStorageProvider(parsedStorage.provider || '@nimbella/storage-gcs')
-  return provider.prepareCredentials(parsedStorage)
-}
-
-// Commander section
-
-// Add the commander data section to a namespace entry.  Returns Promise<true> on success and Promise<false> if the namespace
-// entry does not exist.
-export async function addCommanderData(apihost: string, namespace: string, data: Record<string, unknown>, persister: Persister): Promise<boolean> {
-  const store = await persister.loadCredentialStore()
-  const hostEntry = store.credentials[apihost]
-  if (hostEntry && hostEntry[namespace]) {
-    hostEntry[namespace].commander = data
-  } else {
-    return false
-  }
-  persister.saveCredentialStore(store)
-  return true
+  return { namespace, ow: { apihost: newHost, api_key }, project, production }
 }
 
 // GitHub credentials section
