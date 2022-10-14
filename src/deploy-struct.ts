@@ -57,7 +57,6 @@ export interface ActionSpec {
     triggers?: TriggerSpec[] // Triggers for the function if any
     // Build information (not specifiable in the config)
     build?: string
-    wrapping?: string
     buildResult?: string // The activation id of the remote build
     buildError?: Error // Error reported from the build step
 }
@@ -95,18 +94,6 @@ export interface Flags {
     json: boolean
 }
 
-// Provides the status of a shared build
-export interface BuildStatus {
-    pending: ((arg0: Error)=>void)[]
-    built: boolean
-    error: Error
-}
-
-// Map from shared build directories (absolute paths) to Promise chains representing steps dependent on those builds
-export interface BuildTable {
-    [ key: string]: BuildStatus
-}
-
 // Object to provide feedback (warnings and progress reports) in real time during execution.
 // NOT for debugging.
 // NOT for normal communication: summary messages should be fed back through DeployResponse
@@ -127,8 +114,8 @@ export class DefaultFeedback implements Feedback {
 }
 
 // The top-level deploy structure.  Nothing is required.  If the structure is vacuous, nothing is deployed.   This interface
-// describes the syntax of project.yml and also the structure of a project on disk (where 'web' and 'packages') are
-// subdirectories of the project).   The two sources of information are merged.
+// describes the syntax of project.yml and also the structure of a project on disk where 'packages' is a subdirectory
+// of the project).   The two sources of information are merged.
 export interface DeployStructure {
     packages?: PackageSpec[] // The packages found in the package directory
     targetNamespace?: string | Ownership // The namespace to which we are deploying.  An 'Ownership' implies ownership by the project
@@ -144,7 +131,6 @@ export interface DeployStructure {
     buildEnv?: Record<string,string> // Build time environment
     // The following fields are never permitted in project.yml but are always added internally
     libBuild?: string // Type of build (build.sh or package.json) to apply to the lib directory
-    sharedBuilds?: BuildTable // The build table for this project, populated as shared builds are initiated
     strays?: string[] // files or directories found in the project that don't fit the model, not necessarily an error
     filePath?: string // The location of the project on disk
     githubPath?: string // The original github path specified, if deploying from github
@@ -180,7 +166,6 @@ export interface DeploySuccess {
     name: string
     kind: DeployKind
     skipped: boolean
-    wrapping?: string
 }
 
 // Contains the responses from an actual deployment

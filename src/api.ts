@@ -156,7 +156,6 @@ export async function readProject(projectPath: string, envPath: string, buildEnv
 // others are started.
 export async function buildProject(project: DeployStructure, runtimes: RuntimesConfig): Promise<DeployStructure> {
   debug('Starting buildProject with spec %O', project)
-  project.sharedBuilds = { }
   if (project.libBuild && isRealBuild(project.libBuild)) {
     try {
       await maybeBuildLib(project)

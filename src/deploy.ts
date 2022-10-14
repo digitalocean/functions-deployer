@@ -455,7 +455,7 @@ async function deployActionFromCodeOrSequence(action: ActionSpec, spec: DeploySt
       debug('matched digest for %s', name)
       const actionVersions = {}
       actionVersions[name] = versions.actionVersions[name]
-      return Promise.resolve(wrapSuccess(name, 'action', true, undefined, actionVersions, undefined))
+      return Promise.resolve(wrapSuccess(name, 'action', true, actionVersions, undefined))
     }
     // Record
     debug('recording digest for %s', name)
@@ -513,7 +513,7 @@ async function deployActionFromCodeOrSequence(action: ActionSpec, spec: DeploySt
       map[name] = { version: response.version, digest }
     }
     const namespace = response.namespace.split('/')[0]
-    const success = wrapSuccess(name, 'action', false, action.wrapping, map, namespace)
+    const success = wrapSuccess(name, 'action', false, map, namespace)
     for (let i = 0; i < triggerResults.length; i++) {
       if (triggerResults[i] instanceof Error) {
         const err = triggerResults[i] as any

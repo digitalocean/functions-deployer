@@ -12,7 +12,7 @@
  */
 
 import { spawn } from 'child_process'
-import { DeployStructure, ActionSpec, PackageSpec, BuildTable, Flags, ProjectReader, PathKind, 
+import { DeployStructure, ActionSpec, PackageSpec, Flags, ProjectReader, PathKind, 
   Feedback } from './deploy-struct'
 import {
   actionFileToParts, filterFiles, mapPackages, mapActions,
@@ -126,7 +126,7 @@ function buildAction(action: ActionSpec, spec: DeployStructure, runtimes: Runtim
   }
   debug('building action %O', action)
   let actionDir: string
-  const { reader, flags, feedback, sharedBuilds, slice, buildEnv } = spec
+  const { reader, flags, feedback, slice, buildEnv } = spec
   switch (action.build) {
   case 'build.sh':
     actionDir = makeLocal(reader, action.file)
@@ -136,11 +136,6 @@ function buildAction(action: ActionSpec, spec: DeployStructure, runtimes: Runtim
     actionDir = makeLocal(reader, action.file)
     return scriptBuilder('build.cmd', actionDir, action.displayFile, flags, buildEnv, slice, feedback).then(() => identifyActionFiles(action,
       flags.incremental, flags.verboseZip, reader, feedback, runtimes))
-  case '.build':
-    actionDir = makeLocal(reader, action.file)
-    return outOfLineBuilder(actionDir, action.displayFile, sharedBuilds, true, flags, buildEnv, slice, reader, feedback)
-      .then(() => identifyActionFiles(action,
-        flags.incremental, flags.verboseZip, reader, feedback, runtimes))
   case 'package.json':
     actionDir = makeLocal(reader, action.file)
     return npmBuilder(actionDir, action.displayFile, flags, buildEnv, slice, feedback).then(() => identifyActionFiles(action,
@@ -293,110 +288,6 @@ function readFileAsList(file: string, reader: ProjectReader): Promise<string[]> 
   )
 }
 
-// Perform a build using either a script or a directory pointed to by a .build directive
-// The .build directive is known to exist but has not been read yet.
-function outOfLineBuilder(filepath: string, displayPath: string, sharedBuilds: BuildTable,
-  isAction: boolean, flags: Flags, buildEnv: Record<string, string>, slice: boolean, reader: ProjectReader,
-  feedback: Feedback): Promise<any> {
-  const buildPath = path.join(filepath, '.build')
-  return readFileAsList(buildPath, reader).then(async contents => {
-    if (contents.length === 0 || contents.length > 1) {
-      return Promise.reject(new Error(buildPath + ' contains too many or too few lines'))
-    }
-    const redirected = joinAndNormalize(filepath, contents[0])
-    const stat: PathKind = await reader.getPathKind(redirected)
-    if (stat.isFile) {
-      // Simply run linked-to script in the current directory
-      return scriptBuilder(redirected, filepath, displayPath, flags, buildEnv, slice, feedback)
-    } else if (stat.isDirectory) {
-      // Look in the directory to find build to run
-      return readDirectory(redirected, reader).then(items => {
-        const special = findSpecialFile(items, filepath, isAction, false)
-        let build: () => Promise<any>
-        const cwd = makeLocal(reader, redirected)
-        switch (special) {
-        case 'build.sh':
-        case 'build.cmd': {
-          const script = makeLocal(reader, redirected, special)
-          // Like the direct link case, just a different way of doing it
-          build = () => scriptBuilder(script, cwd, displayPath, flags, buildEnv, slice, feedback)
-          break
-        }
-        case 'package.json':
-          build = () => npmBuilder(cwd, displayPath, flags, buildEnv, slice, feedback)
-          break
-        default:
-          return Promise.reject(new Error(redirected + ' is a directory but contains no build information'))
-        }
-        // Before running the selected build, check for shared build
-        if (isSharedBuild(items)) {
-          // The build is shared so we only run it once
-          const buildKey = makeLocal(reader, redirected)
-          let buildStatus = sharedBuilds[buildKey]
-          if (buildStatus) {
-            // It's already been claimed and is either complete or in progress
-            feedback.progress(`Skipping shared build for '${filepath}' ... already run in this deployment`)
-            debug('buildStatus is %O', buildStatus)
-            if (buildStatus.built) {
-              debug('Found completed build')
-              return Promise.resolve(true)
-            } else if (buildStatus.error) {
-              debug('Found error in build')
-              return Promise.reject(buildStatus.error)
-            } else {
-              // Make a promise that will stay pending until later
-              debug('Found shared build still running')
-              return new Promise(function(resolve, reject) {
-                buildStatus.pending.push(function(err) {
-                  if (err) {
-                    reject(err)
-                  } else {
-                    resolve(true)
-                  }
-                })
-              })
-            }
-          } else {
-            // It has not been run, so we take responsibility for running it
-            feedback.progress(`Running shared build for '${filepath}', results may be reused`)
-            buildStatus = { pending: [], built: false, error: undefined }
-            sharedBuilds[buildKey] = buildStatus
-            return build().then(resultPromise => {
-              debug('shared build completed successfully with resultPromise %O', resultPromise)
-              buildStatus.built = true
-              const toResolve = buildStatus.pending
-              buildStatus.pending = []
-              toResolve.forEach(fcn => fcn(undefined))
-              return true
-            }).catch(err => {
-              debug('shared build completed with error')
-              buildStatus.error = err
-              const toResolve = buildStatus.pending
-              toResolve.forEach(fcn => fcn(err))
-              throw err
-            })
-          }
-        } else {
-          // Not shared, so we run it and return the promise of its completion
-          feedback.progress('Build is not shared')
-          return build()
-        }
-      })
-    }
-  })
-}
-
-// Determine if a build directory reached via .build is shared by looking for a file called .shared
-function isSharedBuild(items: PathKind[]): boolean {
-  let shared = false
-  items.forEach(item => {
-    if (!item.isDirectory && item.name === '.shared') {
-      shared = true
-    }
-  })
-  return shared
-}
-
 // Determine the build step for the lib or web directory or return undefined if there isn't one
 export function getBuildForLibOrWeb(filepath: string, reader: ProjectReader, lib: boolean): Promise<string> {
   if (!filepath) {
@@ -430,7 +321,7 @@ export async function maybeBuildLib(spec: DeployStructure): Promise<void> {
   if (shouldBuild) {
     let scriptPath: string
     const displayPath = path.join(getBestProjectName(spec), 'lib')
-    const { reader, flags, feedback, sharedBuilds, slice, buildEnv } = spec
+    const { reader, flags, feedback, slice, buildEnv } = spec
     switch (spec.libBuild) {
       case 'build.sh':
         scriptPath = makeLocal(reader, 'lib')
@@ -438,9 +329,6 @@ export async function maybeBuildLib(spec: DeployStructure): Promise<void> {
       case 'build.cmd':
         scriptPath = makeLocal(reader, 'lib')
         return scriptBuilder('build.cmd', scriptPath, displayPath, flags, buildEnv, slice, feedback)
-      case '.build':
-        // Does its own localizing
-        return outOfLineBuilder('lib', displayPath, sharedBuilds, false, flags, buildEnv, slice, reader, feedback)
       case 'package.json':
         scriptPath = makeLocal(reader, 'lib')
         return npmBuilder(scriptPath, displayPath, flags, buildEnv, slice, feedback)
