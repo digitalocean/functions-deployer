@@ -106,7 +106,7 @@ export function parseGithubRef(projectPath: string): GithubDef {
     path = remainder.join('/')
   }
   // Add auth and optionally the baseUrl
-  const rawAuth = getGithubAuth(authPersister)
+  const rawAuth = getGithubAuth()
   let [auth, baseUrl] = (rawAuth || '').split('@')
   if (baseUrl) {
     debug('original baseUrl: %s', baseUrl)

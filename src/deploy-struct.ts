@@ -92,6 +92,10 @@ export interface Flags {
     exclude: string|undefined
     remoteBuild: boolean
     json: boolean
+    // low-level flags, documented in help but not how-tos, infrequently used
+    auth: string
+    apiHost: string
+    insecure: boolean
 }
 
 // Object to provide feedback (warnings and progress reports) in real time during execution.
@@ -118,7 +122,7 @@ export class DefaultFeedback implements Feedback {
 // of the project).   The two sources of information are merged.
 export interface DeployStructure {
     packages?: PackageSpec[] // The packages found in the package directory
-    targetNamespace?: string | Ownership // The namespace to which we are deploying.  An 'Ownership' implies ownership by the project
+    targetNamespace?: string // The namespace to which we are deploying
     cleanNamespace?: boolean // Clears entire namespace prior to deploying
     parameters?: Dict // Parameters to apply to all packages in the project
     environment?: Dict // Environment to apply to all packages in the project
@@ -142,13 +146,6 @@ export interface DeployStructure {
     error?: Error // Records an error in reading or preparing, or a terminal error in building; the structure should not be used
     unresolvedVariables?: string[] // Variables that couldn't be resolved in project reading (error may be set also)
     sequences?: ActionSpec[] // detected during action deployment and deferred until ordinary actions are deployed
-}
-
-// Structure declaring ownership of the targetNamespace by this project.  Ownership is recorded only locally (in the credential store)
-export interface Ownership {
-    // Individually optional but at least one must be specified
-    test?: string
-    production?: string
 }
 
 // Types used in the DeployResponse
@@ -284,16 +281,12 @@ export interface CredentialEntry {
 export interface Credentials {
     namespace: string|undefined
     ow: OWOptions
-    project?: string
-    production?: boolean
 }
 
 // Compact and less complete information about a Credential suitable for listing and tabular display
 export interface CredentialRow {
     namespace: string
     current: boolean
-    project?: string
-    production?: boolean
     apihost: string
 }
 

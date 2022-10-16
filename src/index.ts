@@ -21,13 +21,12 @@ export {
   DeployStructure, DeployResponse, DeploySuccess, OWOptions, Credentials, CredentialRow, Flags, PackageSpec, ActionSpec,
   CredentialHostMap, CredentialNSMap, DeployerAnnotation, VersionMap, Feedback, DefaultFeedback, FullCredentials, IdProvider
 } from './deploy-struct'
-export { doLogin, doAdminLogin, doInteractiveLogin } from './login'
 export {
   addCredentialAndSave, getCredentials, getCredentialList, getCredentialDict, getCredentialsForNamespace, forgetNamespace, switchNamespace, getCurrentNamespace,
-  getApiHosts, Persister, fileSystemPersister, browserPersister, authPersister, addGithubAccount, getGithubAccounts, deleteGithubAccount, getGithubAuth, getCredentialsFromEnvironment,
-  switchGithubAccount, getPostmanKeys, deletePostmanKey, switchPostmanKey, addPostmanKey, getPostmanCurrentKey, recordNamespaceOwnership, nimbellaDir, setInBrowser
+  getApiHosts, Persister, authPersister, addGithubAccount, getGithubAccounts, deleteGithubAccount, getGithubAuth, getCredentialsFromEnvironment,
+  switchGithubAccount, nimbellaDir,
 } from './credentials'
-export { wskRequest, inBrowser, delay, writeSliceResult, getBestProjectName, renamePackage, setInBrowserFlag, getExclusionList, isExcluded, 
+export { wskRequest, delay, writeSliceResult, getBestProjectName, renamePackage, getExclusionList, isExcluded, 
   SYSTEM_EXCLUDE_PATTERNS, getRuntimeForAction, emptyStructure, invokeWebSecure, renameActionsToFunctions, deleteAction } from './util'
 export * from './runtimes'
 export { GithubDef, isGithubRef, parseGithubRef, fetchProject } from './github'

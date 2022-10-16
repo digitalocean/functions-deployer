@@ -45,19 +45,13 @@ export const SYSTEM_EXCLUDE_PATTERNS = ['.gitignore', '.DS_Store', '**/.git/**',
   '**/*.swx'
 ]
 
-// Flag indicating running in browser
-export let inBrowser = (typeof process === 'undefined') || (!process.release) || (process.release.name !== 'node')
-
-export function setInBrowserFlag(value: boolean): void {
-  inBrowser = value
-}
 //
 // General utilities
 //
 
 // Read the project config file, with validation
 export async function loadProjectConfig(configFile: string, envPath: string, buildEnvPath: string, filePath: string, reader: ProjectReader,
-  feedback: Feedback, runtimesConfig: RuntimesConfig): Promise<DeployStructure> {
+  feedback: Feedback): Promise<DeployStructure> {
   return reader.readFileContents(configFile).then(async data => {
     try {
       // Read the config, substituting from env
@@ -79,7 +73,7 @@ export async function loadProjectConfig(configFile: string, envPath: string, bui
       // (packages contain actions).
       renameFunctionsToActions(config)
       // Check config
-      const configError = validateDeployConfig(config, runtimesConfig)
+      const configError = await validateDeployConfig(config)
       if (configError) {
         throw new Error(configError)
       } else {
@@ -139,7 +133,6 @@ export function isRealBuild(buildField: string): boolean {
   switch (buildField) {
     case 'build.sh':
     case 'build.cmd':
-    case '.build':
     case 'package.json':
       return true
     default:
@@ -158,23 +151,17 @@ function locateBuild(buildField: string, remoteRequested: boolean, defaultRemote
     } // else does not meet remote-default conditions
     return buildField
   } // else it's a real build. Check conditions for remote.
-  if (inBrowser || remoteRequired || (remoteRequested && !localRequired)) {
+  if (remoteRequired || (remoteRequested && !localRequired)) {
     return 'remote'
   } // else does not meet conditions for remote
   return buildField
 }
 
 // Set up the build fields for a project and detect conflicts.  Determine if local building is required.
-export async function checkBuildingRequirements(todeploy: DeployStructure, requestRemote: boolean, runtimes: RuntimesConfig): Promise<boolean> {
+export async function checkBuildingRequirements(todeploy: DeployStructure, requestRemote: boolean): Promise<boolean> {
   const checkConflicts = (buildField: string, remote: boolean, local: boolean, tag: string) => {
     if (remote && local) {
       throw new Error(`Local and remote building cannot both be required (${tag})`)
-    }
-    if (remote && buildField === '.build') {
-      throw new Error(`Remote building cannot be required when using a '.build' directive (${tag})`)
-    }
-    if (local && inBrowser) {
-      throw new Error(`Local building required but cannot occur in the workbench; use the CLI (${tag})`)
     }
   }
   if (todeploy.packages) {
@@ -191,7 +178,7 @@ export async function checkBuildingRequirements(todeploy: DeployStructure, reque
     for (const pkg of todeploy.packages) {
       if (pkg.actions) {
         for (const action of pkg.actions) {
-          const defaultRemote = await hasDefaultRemote(action, todeploy.reader, runtimes)
+          const defaultRemote = await hasDefaultRemote(action, todeploy.reader)
           action.build = locateBuild(action.build, requestRemote, defaultRemote, action.remoteBuild, action.localBuild)
           needsLocal = needsLocal || (!action.build?.startsWith('remote') && isRealBuild(action.build))
         }
@@ -204,8 +191,8 @@ export async function checkBuildingRequirements(todeploy: DeployStructure, reque
 // Determine if an action has a default remote build.  This depends on the action's 'kind': currently, swift and go have a
 // default remote build while other languages do not.   This function is designed to be called before the runtime is otherwise
 // known so it is prepared to peek into the project to figure out the operative runtime.
-async function hasDefaultRemote(action: ActionSpec, reader: ProjectReader, runtimes: RuntimesConfig): Promise<boolean> {
-  const runtime = await getRuntimeForAction(action, reader, runtimes)
+async function hasDefaultRemote(action: ActionSpec, reader: ProjectReader): Promise<boolean> {
+  const runtime = await getRuntimeForAction(action, reader)
   if (!runtime) {
     return false 
   }
@@ -220,7 +207,7 @@ async function hasDefaultRemote(action: ActionSpec, reader: ProjectReader, runti
   }
 }
 
-export async function getRuntimeForAction(action: ActionSpec, reader: ProjectReader, runtimes: RuntimesConfig): Promise<string> {
+export async function getRuntimeForAction(action: ActionSpec, reader: ProjectReader): Promise<string> {
   if (action.runtime) {
     return action.runtime
   }
@@ -230,11 +217,11 @@ export async function getRuntimeForAction(action: ActionSpec, reader: ProjectRea
   const pathKind = await reader.getPathKind(action.file)
   if (pathKind.isFile) {
     let runtime: string
-    ({ runtime } = actionFileToParts(pathKind.name, runtimes))
+    ({ runtime } = await actionFileToParts(pathKind.name))
     return runtime
   } else if (pathKind.isDirectory) {
     const files = await promiseFilesAndFilterFiles(action.file, reader)
-    return agreeOnRuntime(files, runtimes)
+    return agreeOnRuntime(files)
   } else {
     return ''
   }
@@ -242,10 +229,10 @@ export async function getRuntimeForAction(action: ActionSpec, reader: ProjectRea
 
 // Check whether a list of names that are candidates for zipping can agree on a runtime.  This is called only when the
 // config doesn't already provide a runtime or on the raw material in the case of remote builds.
-export function agreeOnRuntime(items: string[], runtimes: RuntimesConfig): string {
+export async function agreeOnRuntime(items: string[]): Promise<string> {
   let agreedRuntime: string
-  items.forEach(item => {
-    const { runtime } = actionFileToParts(item, runtimes)
+  items.forEach(async item => {
+    const { runtime } = await actionFileToParts(item)
     if (runtime) {
       if (agreedRuntime && runtime !== agreedRuntime) {
         return undefined
@@ -283,7 +270,7 @@ function removeEmptyStringMembersFromPackages(packages: PackageSpec[]) {
 }
 
 // Validation for DeployStructure read from disk.
-export function validateDeployConfig(arg: any, runtimesConfig: RuntimesConfig): string {
+export async function validateDeployConfig(arg: any): Promise<string> {
   const isNimbellaDeploy = arg.targetNamespace === 'nimbella'
   const slice = !!arg.slice
   for (const item in arg) {
@@ -307,7 +294,7 @@ export function validateDeployConfig(arg: any, runtimesConfig: RuntimesConfig): 
           return 'packages member must be an array'
         }
         for (const subitem of arg[item]) {
-          const pkgError = validatePackageSpec(subitem, runtimesConfig, slice, isNimbellaDeploy)
+          const pkgError = await validatePackageSpec(subitem, slice, isNimbellaDeploy)
           if (pkgError) {
             return pkgError
           }
@@ -346,8 +333,7 @@ function isValidOwnership(item: any): boolean {
 }
 
 // Validator for a PackageSpec
-function validatePackageSpec(arg: Record<string, any>, runtimesConfig: RuntimesConfig, slice: boolean,
-    isNimbella: boolean): string {
+async function validatePackageSpec(arg: Record<string, any>, slice: boolean, isNimbella: boolean): Promise<string> {
   const isDefault = arg.name === 'default'
   for (const item in arg) {
     if (!arg[item]) continue
@@ -360,7 +346,7 @@ function validatePackageSpec(arg: Record<string, any>, runtimesConfig: RuntimesC
         return "actions member of a 'package' must be an array"
       }
       for (const subitem of arg[item]) {
-        const actionError = validateActionSpec(subitem, runtimesConfig, isNimbella)
+        const actionError = await validateActionSpec(subitem, isNimbella)
         if (actionError) {
           return actionError
         }
@@ -397,7 +383,7 @@ function validatePackageSpec(arg: Record<string, any>, runtimesConfig: RuntimesC
 }
 
 // Validator for ActionSpec
-function validateActionSpec(arg: Record<string, any>, runtimesConfig: RuntimesConfig, isNimbella: boolean): string {
+async function validateActionSpec(arg: Record<string, any>, isNimbella: boolean): Promise<string> {
   for (const item in arg) {
     if (!arg[item]) continue
     switch (item) {
@@ -409,7 +395,7 @@ function validateActionSpec(arg: Record<string, any>, runtimesConfig: RuntimesCo
         if (!(typeof arg[item] === 'string')) {
           return `'${item}' member of an 'action' must be a string`
         }
-        if (item === 'runtime' && Object.keys(runtimesConfig).length > 0 && !isValidRuntime(runtimesConfig, arg[item])) {
+        if (item === 'runtime' && !await isValidRuntime(arg[item])) {
           return `'${arg[item]}' is not a valid runtime value`
         }
         break
@@ -737,7 +723,7 @@ export function getTargetNamespace(client: Client): Promise<string> {
 }
 
 // Process an action file name, producing 'name', 'binary', 'zipped' and 'runtime' parts
-export function actionFileToParts(fileName: string, runtimes: RuntimesConfig): { name: string, binary: boolean, zipped: boolean, runtime: string } {
+export async function actionFileToParts(fileName: string): Promise<{ name: string, binary: boolean, zipped: boolean, runtime: string }> {
   let runtime: string
   let binary: boolean
   let zipped: boolean
@@ -754,7 +740,7 @@ export function actionFileToParts(fileName: string, runtimes: RuntimesConfig): {
     } else {
       name = parts.slice(0, -1).join('.')
     }
-    runtime = mid ? runtimeForZipMid(runtimes, mid) : runtimeForFileExtension(ext)
+    runtime = mid ? await runtimeForZipMid(mid) : runtimeForFileExtension(ext)
     binary = isBinaryFileExtension(ext)
     zipped = ext === 'zip'
   } else {

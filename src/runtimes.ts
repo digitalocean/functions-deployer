@@ -1,12 +1,57 @@
 import axios, { AxiosInstance } from 'axios'
-import { getCredentials, authPersister } from './credentials'
+import { getCredentials } from './credentials'
+import { Credentials } from './deploy-struct'
 
 import debug from 'debug'
 const debug_log = debug('nim:deployer:runtimes')
 
 export const API_ENDPOINT = '/api/v1'
 
-const RuntimesCache: Record<string, RuntimesConfig> = {}
+let cachedRuntimes: RuntimesConfig
+
+// Static table to use if the host cannot be contacted
+const staticRuntimes: RuntimesConfig = {
+  "go": [
+    {
+      "default": false,
+      "kind": "go:1.15"
+    },
+    {
+      "default": true,
+      "kind": "go:1.17"
+    }
+  ],
+  "nodejs": [
+    {
+      "default": true,
+      "kind": "nodejs:14"
+    },
+    {
+      "default": false,
+      "kind": "nodejs-lambda:14"
+    },
+    {
+      "default": false,
+      "kind": "nodejs:18"
+    },
+    {
+      "default": false,
+      "kind": "nodejs-lambda:18"
+    }
+  ],
+  "php": [
+    {
+      "default": true,
+      "kind": "php:8.0"
+    }
+  ],
+  "python": [
+    {
+      "default": true,
+      "kind": "python:3.9"
+    }
+  ]
+}
 
 // Custom types for runtimes.json configuration parameters
 type RuntimeLabel = string
@@ -86,14 +131,15 @@ export function fileExtensionForRuntime(runtime: RuntimeKind, isBinaryExtension:
 }
 
 // Does the runtime kind exist in the platform config?
-export function isValidRuntime(runtimes: RuntimesConfig, kind: RuntimeKind): boolean {
-  debug_log(`isValidRuntime: runtimes (${runtimes}) kind (${kind})`)
+export async function isValidRuntime(kind: RuntimeKind): Promise<boolean> {
+  debug_log(`isValidRuntime: kind (${kind})`)
   let exactMatch = true
   if (kind.endsWith(':default')) {
     kind = kind.split(':')[0] + ':'
     exactMatch = false
   }
   debug_log('searching')
+  const runtimes = await getRuntimes()
   for (const runtimeArray of Object.values(runtimes)) {
     for (const runtime of runtimeArray) {
       if (exactMatch && kind === runtime.kind) {
@@ -118,15 +164,16 @@ export function defaultRuntime(runtimes: RuntimesConfig, label: RuntimeLabel): R
 }
 
 // Compute a runtime kind from the 'mid string' of a file name of the form name.runtime.zip
-export function runtimeForZipMid(runtimes: RuntimesConfig, mid: string): RuntimeKind {
+export async function runtimeForZipMid(mid: string): Promise<RuntimeKind> {
   const runtime = mid.includes('-') ? mid.replace('-', ':') : `${mid}:default`
-  return isValidRuntime(runtimes, runtime) ? runtime : undefined
+  return await isValidRuntime(runtime) ? runtime : undefined
 }
 
 // Return default kind for runtime label - if explicit version isn't used.
-export function canonicalRuntime(runtimes: RuntimesConfig, runtime: RuntimeKind) {
+export async function canonicalRuntime(runtime: RuntimeKind): Promise<RuntimeKind> {
   if (runtime.endsWith(':default')) {
     const [label] = runtime.split(':')
+    const runtimes = await getRuntimes()
     return defaultRuntime(runtimes, label)
   }
   return runtime
@@ -146,20 +193,27 @@ export async function load(apihost: string): Promise<RuntimesConfig> {
   return runtimes
 }
 
-// Initialize runtimes configuration from platform host for current namespace.
-// The parsed runtime configuration will be stored in a local cache.
-// API host parameter is used as the cache key.
-// The cached values will be returned after the first call.
-export async function initRuntimes(): Promise<RuntimesConfig> {
+// Get the runtimes configuration.  This code assumes that _either_ all API hosts are equivalent
+// _or_ only one API host is used in the module lifetime.
+// The parsed runtime configuration will be stored in a local cache and returned after the first call.
+// If no API host can be determined or there is an error contacting the host, then a built-in table
+// is returned (this information changes slowly and so the built-in value can't be terribly stale).
+export async function getRuntimes(): Promise<RuntimesConfig> {
+  if (cachedRuntimes) {
+    return cachedRuntimes
+  }
   // Determine the API host either by reading the credential store or looking in the environment.
   // The latter is needed when running in a container performing remote build, since there may not be
   // any credential store.
-  const store = authPersister.loadCredentialStoreIfPresent()
-  const apihost = store?.currentHost || process.env.__OW_API_HOST || process.env.savedOW_API_HOST
-  if (!apihost) throw new Error('Missing APIHOST parameter from current credentials')
-  if (!RuntimesCache[apihost]) {
-    RuntimesCache[apihost] = await load(apihost)
+  let creds: Credentials
+  try {
+    creds = await getCredentials()
+  } catch {}
+  const apihost = creds?.ow?.apihost || process.env.__OW_API_HOST || process.env.savedOW_API_HOST
+  if (apihost) {
+    cachedRuntimes = await load(apihost)
+  } else {
+    cachedRuntimes = staticRuntimes
   }
-
-  return RuntimesCache[apihost]
+  return cachedRuntimes
 }
