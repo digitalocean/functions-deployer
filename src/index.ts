@@ -22,16 +22,11 @@ export {
   CredentialHostMap, CredentialNSMap, DeployerAnnotation, VersionMap, Feedback, DefaultFeedback, FullCredentials, IdProvider
 } from './deploy-struct'
 export {
-  StorageProvider, StorageClient, RemoteFile
-} from '@nimbella/storage'
-export { doLogin, doAdminLogin, doInteractiveLogin } from './login'
-export {
   addCredentialAndSave, getCredentials, getCredentialList, getCredentialDict, getCredentialsForNamespace, forgetNamespace, switchNamespace, getCurrentNamespace,
-  getApiHosts, Persister, fileSystemPersister, browserPersister, authPersister, addGithubAccount, getGithubAccounts, deleteGithubAccount, getGithubAuth, getCredentialsFromEnvironment,
-  switchGithubAccount, getPostmanKeys, deletePostmanKey, switchPostmanKey, addPostmanKey, getPostmanCurrentKey, addCommanderData, recordNamespaceOwnership, nimbellaDir, setInBrowser
+  getApiHosts, Persister, authPersister, addGithubAccount, getGithubAccounts, deleteGithubAccount, getGithubAuth, getCredentialsFromEnvironment,
+  switchGithubAccount, nimbellaDir,
 } from './credentials'
-export { cleanBucket, restore404Page, makeStorageClient } from './deploy-to-bucket'
-export { wskRequest, inBrowser, delay, writeSliceResult, getBestProjectName, isTextType, renamePackage, setInBrowserFlag, getExclusionList, isExcluded, 
+export { wskRequest, delay, writeSliceResult, getBestProjectName, renamePackage, getExclusionList, isExcluded, 
   SYSTEM_EXCLUDE_PATTERNS, getRuntimeForAction, emptyStructure, invokeWebSecure, renameActionsToFunctions, deleteAction } from './util'
 export * from './runtimes'
 export { GithubDef, isGithubRef, parseGithubRef, fetchProject } from './github'

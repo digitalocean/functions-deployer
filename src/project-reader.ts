@@ -14,16 +14,15 @@
 import * as path from 'path'
 import * as fs from 'fs'
 import { getUserAgent } from './api'
-import { DeployStructure, PackageSpec, ActionSpec, WebResource, Includer, ProjectReader, PathKind, Feedback } from './deploy-struct'
-import { emptyStructure, actionFileToParts, filterFiles, convertToResources, promiseFilesAndFilterFiles, 
-  loadProjectConfig, errorStructure, getDeployerAnnotation, getBestProjectName, isRealBuild } from './util'
+import { DeployStructure, PackageSpec, ActionSpec, Includer, ProjectReader, PathKind, Feedback } from './deploy-struct'
+import { emptyStructure, actionFileToParts, filterFiles,
+  loadProjectConfig, errorStructure, getDeployerAnnotation, getBestProjectName } from './util'
 import { getBuildForAction, getBuildForLibOrWeb } from './finder-builder'
 import { isGithubRef, parseGithubRef, fetchProject } from './github'
 import makeDebug from 'debug'
 import { makeFileReader } from './file-reader'
 import { makeGithubReader } from './github-reader'
 import { fetchSlice } from './slice-reader'
-import { RuntimesConfig } from './runtimes'
 const debug = makeDebug('nim:deployer:project-reader')
 
 const CONFIG_FILE = 'project.yml'
@@ -32,7 +31,6 @@ const ENV_FILE = '.env'
 
 // Read the top level files and dirs of the project.  Only one file and two dirs are legal at this level; everything else is a 'stray'
 interface TopLevel {
-    web: string
     lib: string
     packages: string
     config?: string
@@ -85,10 +83,9 @@ export async function readTopLevel(filePath: string, env: string, buildEnv: stri
     }
     reader = makeFileReader(filePath)
   }
-  const webDir = 'web'; const pkgDir = 'packages'; const libDir = 'lib'
+  const pkgDir = 'packages'; const libDir = 'lib'
   return reader.readdir('').then(items => {
     items = filterFiles(items)
-    let web: string
     let config: string
     let notconfig: string
     let legacyConfig: string
@@ -98,9 +95,6 @@ export async function readTopLevel(filePath: string, env: string, buildEnv: stri
     for (const item of items) {
       if (item.isDirectory) {
         switch (item.name) {
-        case webDir:
-          if (includer.isWebIncluded) { web = webDir }
-          break
         case pkgDir:
           packages = pkgDir
           break
@@ -137,7 +131,7 @@ export async function readTopLevel(filePath: string, env: string, buildEnv: stri
       debug('github path was %s', githubPath)
       debug('filePath is %s', filePath)
     }
-    const ans = { web, lib, packages, config, strays, filePath, env, buildEnv, githubPath, includer, reader, feedback }
+    const ans = { lib, packages, config, strays, filePath, env, buildEnv, githubPath, includer, reader, feedback }
     debug('readTopLevel returning %O', ans)
     return ans
   })
@@ -145,17 +139,16 @@ export async function readTopLevel(filePath: string, env: string, buildEnv: stri
 
 // Probe the top level structure to obtain the major parts of the final config.  Spawn builders for those parts and
 // assemble a "Promise.all" for the combined work
-export async function buildStructureParts(topLevel: TopLevel, runtimes: RuntimesConfig): Promise<DeployStructure[]> {
-  const { web, lib, packages, config, strays, filePath, env, buildEnv, githubPath, includer, reader, feedback } = topLevel
-  let configPart = await readConfig(config, env, buildEnv, filePath, includer, reader, feedback, runtimes)
+export async function buildStructureParts(topLevel: TopLevel): Promise<DeployStructure[]> {
+  const { lib, packages, config, strays, filePath, env, buildEnv, githubPath, includer, reader, feedback } = topLevel
+  let configPart = await readConfig(config, env, buildEnv, filePath, includer, reader, feedback)
   const deployerAnnotation = configPart.deployerAnnotation || await getDeployerAnnotation(filePath, githubPath)
   configPart = Object.assign(configPart, { strays, filePath, githubPath, includer, reader, feedback, deployerAnnotation })
   const displayName = getBestProjectName(configPart)
   debug('display path for actions is %O', displayName)
-  const webPart = await getBuildForLibOrWeb(web, reader, false).then(build => buildWebPart(web, build, reader))
-  const actionsPart = await buildActionsPart(packages, displayName, includer, reader, runtimes)
+  const actionsPart = await buildActionsPart(packages, displayName, includer, reader)
   configPart.libBuild = await getBuildForLibOrWeb(lib, reader, true)
-  return [webPart, actionsPart, configPart]
+  return [actionsPart, configPart]
 }
 
 // Assemble a complete initial structure containing all file system information and config.  May be deployed as is or adjusted
@@ -163,59 +156,18 @@ export async function buildStructureParts(topLevel: TopLevel, runtimes: Runtimes
 // are only suitable for bucket deploy so we check for that problem here.
 export function assembleInitialStructure(parts: DeployStructure[]): DeployStructure {
   debug('Assembling structure from parts')
-  const [webPart, actionsPart, configPart] = parts
+  const [actionsPart, configPart] = parts
   const errPart = parts.find(part => part.error)
   if (errPart) {
     return errPart
   }
   const strays = (actionsPart.strays || []).concat(configPart.strays || [])
   configPart.strays = strays
-  configPart.web = (webPart.web && configPart.web) ? mergeWeb(webPart.web, configPart.web)
-    : webPart.web ? webPart.web : configPart.web ? configPart.web : []
   configPart.packages = (actionsPart.packages && configPart.packages) ? mergePackages(actionsPart.packages, configPart.packages)
     : actionsPart.packages ? actionsPart.packages : configPart.packages ? configPart.packages : []
   adjustWebExportFlags(configPart.packages)
-  configPart.webBuild = webPart.webBuild
-  if (configPart.actionWrapPackage) {
-    configPart.web.forEach(res => {
-      if (res.simpleName.includes('/')) {
-        throw new Error(`Web resource ${res.simpleName} cannot be deployed with action-wrapping (has nested structure)`)
-      }
-    })
-  }
   debug('Result of assembly: %O', configPart)
   return configPart
-}
-
-// Merge 'web' portion of config, if any, into the 'web' array read from the file system.  The merge key is the
-// simple name.
-function mergeWeb(fs: WebResource[], config: WebResource[]): WebResource[] {
-  const merge = {}
-  fs.forEach(resource => {
-    merge[resource.simpleName] = resource
-  })
-  config.forEach(resource => {
-    const already = merge[resource.simpleName]
-    merge[resource.simpleName] = already ? mergeWebResource(already, resource) : resource
-  })
-  const ans: WebResource[] = []
-  for (const name in merge) {
-    ans.push(merge[name])
-  }
-  return ans
-}
-
-// Merge a single WebResource: the file system and config contributions have the same simpleName.  Exactly one must specify
-// the filePath or an error is indicated.  For other properties, information in the config takes precedence.
-function mergeWebResource(fs: WebResource, config: WebResource): WebResource {
-  if (fs.filePath && config.filePath) {
-    throw new Error('Config may not specify filePath for WebResource that already has a filePath')
-  }
-  const ans = Object.assign({}, fs, config)
-  if (!ans.filePath) {
-    throw new Error(`WebResource ${fs.simpleName} has no filePath`)
-  }
-  return ans
 }
 
 // Merge 'packages' portion of config, if any, into the 'packages' array read from the file system.
@@ -309,32 +261,12 @@ function mergeAction(fs: ActionSpec, config: ActionSpec): ActionSpec {
   return result
 }
 
-// Probe the web directory.  We find all files even under subdirectories (no strays here).  However, if we turn out to be
-// action-wrapping (which is not known at this point), file names with slashes will cause an error later.
-function buildWebPart(webdir: string, build: string, reader: ProjectReader): Promise<DeployStructure> {
-  if (!webdir) {
-    return Promise.resolve(emptyStructure())
-  } else {
-    return readWebResources(webdir, reader).then(resources => {
-      return { web: resources, webBuild: build, packages: [], strays: [] }
-    })
-  }
-}
-
-// Read the resources of the web directory
-function readWebResources(webdir: string, reader: ProjectReader): Promise<WebResource[]> {
-  debug('readWebResources for %s', webdir)
-  return promiseFilesAndFilterFiles(webdir, reader).then((items: string[]) => {
-    return convertToResources(items, webdir.length + 1)
-  })
-}
-
 // Probe the packages directory
-function buildActionsPart(pkgsdir: string, displayPath: string, includer: Includer, reader: ProjectReader, runtimes: RuntimesConfig): Promise<DeployStructure> {
+function buildActionsPart(pkgsdir: string, displayPath: string, includer: Includer, reader: ProjectReader): Promise<DeployStructure> {
   if (!pkgsdir) {
     return Promise.resolve(emptyStructure())
   } else {
-    return buildPkgArray(pkgsdir, displayPath, includer, reader, runtimes).then((values) => {
+    return buildPkgArray(pkgsdir, displayPath, includer, reader).then((values) => {
       const [strays, pkgs] = values
       return { web: [], packages: pkgs, strays: strays }
     })
@@ -342,7 +274,7 @@ function buildActionsPart(pkgsdir: string, displayPath: string, includer: Includ
 }
 
 // Accumulate the arrays of PackageSpecs and Strays in the 'packages' directory
-function buildPkgArray(pkgsDir: string, displayPath: string, includer: Includer, reader: ProjectReader, runtimes: RuntimesConfig): Promise<any> {
+function buildPkgArray(pkgsDir: string, displayPath: string, includer: Includer, reader: ProjectReader): Promise<any> {
   debug('Building package array')
   return reader.readdir(pkgsDir).then((items: PathKind[]) => {
     items = filterFiles(items)
@@ -352,7 +284,7 @@ function buildPkgArray(pkgsDir: string, displayPath: string, includer: Includer,
     for (const name of pkgNames) {
       if (includer.isPackageIncluded(name, false)) {
         const pkgPath = path.join(pkgsDir, name)
-        rdrs.push(readPackage(pkgPath, path.join(displayPath, name), name, includer, reader, runtimes))
+        rdrs.push(readPackage(pkgPath, path.join(displayPath, name), name, includer, reader))
       }
     }
     return Promise.all([Promise.resolve(strays), Promise.all(rdrs)])
@@ -362,9 +294,9 @@ function buildPkgArray(pkgsDir: string, displayPath: string, includer: Includer,
 // Read the contents of a directory defining a package.  By convention, actions not requiring a build step are stored directly in the
 // package directory.  Those requiring a build are stored in a subdirectory.  The name of each action is the single file name (sans suffix)
 // or the name of the subdirectory.
-function readPackage(pkgPath: string, displayPath: string, pkgName: string, includer: Includer, reader: ProjectReader, runtimes: RuntimesConfig): Promise<PackageSpec> {
+async function readPackage(pkgPath: string, displayPath: string, pkgName: string, includer: Includer, reader: ProjectReader): Promise<PackageSpec> {
   debug("reading information for package '%s' with display path '%s'", pkgPath, displayPath)
-  return reader.readdir(pkgPath).then((items: PathKind[]) => {
+  return reader.readdir(pkgPath).then(async (items: PathKind[]) => {
     items = filterFiles(items)
     const promises: Promise<ActionSpec>[] = []
     const seen = new Map<string,string>()
@@ -374,7 +306,7 @@ function readPackage(pkgPath: string, displayPath: string, pkgName: string, incl
       debug('item %s has display path %s', item.name, displayFile)
       if (!item.isDirectory) {
         // Directly deployable action not requiring a build.
-        const { name, runtime, binary, zipped } = actionFileToParts(item.name, runtimes)
+        const { name, runtime, binary, zipped } = await actionFileToParts(item.name)
         if (!includer.isActionIncluded(pkgName, name)) continue
         const before = seen.get(name)
         if (before) {
@@ -411,14 +343,14 @@ function duplicateName(actionName: string, formerUse: string, newUse: string) {
 
 // Read the config file if present.  For convenience, the extra information not merged from elsewhere is tacked on here
 async function readConfig(configFile: string, envPath: string, buildEnvPath: string, filePath: string, includer: Includer, reader: ProjectReader,
-  feedback: Feedback, runtimesConfig: RuntimesConfig): Promise<DeployStructure> {
+  feedback: Feedback): Promise<DeployStructure> {
   if (!configFile) {
     debug('No config file found')
     const ans = Object.assign({}, emptyStructure())
     return Promise.resolve(ans)
   }
   debug('Reading config file')
-  const config = loadProjectConfig(configFile, envPath, buildEnvPath, filePath, reader, feedback, runtimesConfig).then(config => trimConfigWithIncluder(config, includer))
+  const config = loadProjectConfig(configFile, envPath, buildEnvPath, filePath, reader, feedback).then(config => trimConfigWithIncluder(config, includer))
     .catch(err => errorStructure(err))
   debug('Config contents: %O', config)
   return config
@@ -426,11 +358,6 @@ async function readConfig(configFile: string, envPath: string, buildEnvPath: str
 
 // Given a DeployStructure with web and package sections, trim those sections according to the rules of an Includer
 function trimConfigWithIncluder(config: DeployStructure, includer: Includer): DeployStructure {
-  if (!includer.isWebIncluded) {
-    config.web = []
-    config.bucket = undefined
-    config.actionWrapPackage = ''
-  }
   if (config.packages) {
     const newPkgs: PackageSpec[] = []
     for (const pkg of config.packages) {

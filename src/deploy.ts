@@ -12,18 +12,15 @@
  */
 
 import {
-  DeployStructure, DeployResponse, ActionSpec, PackageSpec, WebResource, BucketSpec, VersionEntry,
-  ProjectReader, OWOptions, KeyVal, Feedback, DeploySuccess
+  DeployStructure, DeployResponse, ActionSpec, PackageSpec, VersionEntry,
+  KeyVal, Feedback, DeploySuccess
 } from './deploy-struct'
-import { StorageClient } from '@nimbella/storage'
 import {
-  combineResponses, wrapError, wrapSuccess, keyVal, emptyResponse, isTextType, getActionName,
+  combineResponses, wrapError, wrapSuccess, keyVal, emptyResponse, getActionName,
   straysToResponse, wipe, makeDict, digestPackage, digestAction, loadVersions, waitForActivation,
   deleteAction
 } from './util'
 import openwhisk from 'openwhisk'
-import { deployToBucket, cleanBucket } from './deploy-to-bucket'
-import { ensureWebLocal, deployToWebLocal } from './web-local'
 import { deployTriggers } from './triggers'
 import rimrafOrig from 'rimraf'
 import { promisify } from 'util'
@@ -54,16 +51,6 @@ export async function cleanOrLoadVersions(todeploy: DeployStructure): Promise<De
     // Incremental deployment requires the versions up front to have access to the form hashes
     todeploy.versions = loadVersions(todeploy.filePath, todeploy.credentials.namespace, todeploy.credentials.ow.apihost)
   } else {
-    if (todeploy.includer.isWebIncluded && !todeploy.webBuildResult && (todeploy.cleanNamespace || (todeploy.bucket && todeploy.bucket.clean))) {
-      if (todeploy.bucketClient) {
-        const warn = await cleanBucket(todeploy.bucketClient, todeploy.bucket, todeploy.credentials.ow)
-        if (warn) {
-          todeploy.feedback.warn(warn)
-        }
-      } else if (todeploy.flags.webLocal) {
-        await rimraf(todeploy.flags.webLocal)
-      }
-    }
     if (todeploy.cleanNamespace && todeploy.includer.isIncludingEverything()) {
       await wipe(todeploy.owClient)
     } else {
@@ -75,23 +62,10 @@ export async function cleanOrLoadVersions(todeploy: DeployStructure): Promise<De
 
 // Do the actual deployment (after testing the target namespace and cleaning)
 export async function doDeploy(todeploy: DeployStructure): Promise<DeployResponse> {
-  let webLocal: string
-  if (todeploy.flags.webLocal) {
-    webLocal = ensureWebLocal(todeploy.flags.webLocal)
-  }
-  let webResults: DeployResponse[]
-  const remoteResult = todeploy.webBuildResult
-  if (remoteResult) {
-    webResults = [await processRemoteResponse(remoteResult, todeploy.owClient, 'web content', todeploy.feedback)]
-  } else if (todeploy.webBuildError) {
-    webResults = [wrapError(todeploy.webBuildError, 'web content')]
-  } else {
-    webResults = await deployAllWebResources(todeploy, webLocal)
-  }
   const skipPkgDeploy = todeploy.slice && todeploy.deployerAnnotation.newSliceHandling
   delete todeploy.deployerAnnotation.newSliceHandling
   const actionPromises = todeploy.packages.map(pkg => deployPackage(pkg, todeploy, skipPkgDeploy))
-  const responses: DeployResponse[] = webResults.concat(await Promise.all(actionPromises))
+  const responses: DeployResponse[] = await Promise.all(actionPromises)
   responses.push(straysToResponse(todeploy.strays))
   const sequenceResponses = await deploySequences(todeploy)
   responses.push(...sequenceResponses)
@@ -99,21 +73,6 @@ export async function doDeploy(todeploy: DeployStructure): Promise<DeployRespons
   response.apihost = todeploy.credentials.ow.apihost
   if (!response.namespace) { response.namespace = todeploy.credentials.namespace }
   return response
-}
-
-// Deploy web resources, potentially in chunks to avoid overloading the storage server
-async function deployAllWebResources(todeploy: DeployStructure, webLocal: string): Promise<DeployResponse[]> {
-  let pending = todeploy.web
-  const ans: DeployResponse[] = []
-  while (pending.length > 0) {
-    const chunk = pending.length > DEPLOYMENT_CHUNK_SIZE ? pending.slice(0, DEPLOYMENT_CHUNK_SIZE) : pending
-    pending = pending.slice(chunk.length)
-    const chunkResults = chunk.map(res => deployWebResource(res, todeploy.actionWrapPackage, todeploy.bucket,
-      todeploy.bucketClient, todeploy.flags.incremental ? todeploy.versions : undefined, webLocal, todeploy.reader,
-      todeploy.credentials.ow))
-    ans.push(...await Promise.all(chunkResults))
-  }
-  return ans
 }
 
 // Process the remote result when something has been built remotely
@@ -199,45 +158,6 @@ export async function cleanPackage(client: openwhisk.Client, name: string, versi
       await deleteAction(name + '/' + action.name, client)
     }
   }
-}
-
-// Deploy a web resource.  If this is invoked, we can assume that at least one of actionWrapPackage, bucketClient,
-// or webLocal is defined.  If actionWrapPackage is provided, this step is a no-op since the actual action wrapping
-// will have been done in the prepareToDeploy step and the fact of action wrapping will be part of the final status
-// message for deploying the action.  If webLocal is specified, the deploy is just a copy to the specified location,
-// which is assumed to exist (it should have been created already).  Otherwise, if bucketClient is specified, this
-// is a traditional deploy to the bucket.  Otherwise (none specified) it is an error.
-export function deployWebResource(res: WebResource, actionWrapPackage: string, spec: BucketSpec,
-  bucketClient: StorageClient, versions: VersionEntry, webLocal: string, reader: ProjectReader, owOptions: OWOptions): Promise<DeployResponse> {
-  // We can rely on the fact that prepareToDeploy would have rejected the deployment if action wrapping failed.
-  if (actionWrapPackage) {
-    return Promise.resolve(emptyResponse())
-  } else if (webLocal) {
-    return deployToWebLocal(res, webLocal, spec)
-  } else if (bucketClient) {
-    return deployToBucket(res, bucketClient, spec, versions, reader, owOptions)
-  } else {
-    return Promise.resolve(wrapError(new Error(`No bucket client and/or bucket spec for '${res.simpleName}'`), 'web resources'))
-  }
-}
-
-// Wrap a web resource in an action.   Returns a promise of the resulting ActionSpec
-export async function actionWrap(res: WebResource, reader: ProjectReader, pkgName: string): Promise<ActionSpec> {
-  const body = (await reader.readFileContents(res.filePath)).toString('base64')
-  const name = res.simpleName.endsWith('.html') ? res.simpleName.replace('.html', '') : res.simpleName
-  let bodyExpr = `  const body = '${body}'`
-  if (isTextType(res.mimeType)) {
-    bodyExpr = "  const body = Buffer.from('" + body + "', 'base64').toString('utf-8')"
-  }
-  const code = `function main() {
-    ${bodyExpr}
-    return {
-       statusCode: 200,
-       headers: { 'Content-Type': '${res.mimeType}' },
-       body
-    }
-}`
-  return { name, file: res.filePath, runtime: 'nodejs:default', binary: false, web: true, code, wrapping: res.filePath, package: pkgName }
 }
 
 // Deploy an array of actions of arbitrary size, ensuring that most CHUNK_SIZE operations
@@ -535,7 +455,7 @@ async function deployActionFromCodeOrSequence(action: ActionSpec, spec: DeploySt
       debug('matched digest for %s', name)
       const actionVersions = {}
       actionVersions[name] = versions.actionVersions[name]
-      return Promise.resolve(wrapSuccess(name, 'action', true, undefined, actionVersions, undefined))
+      return Promise.resolve(wrapSuccess(name, 'action', true, actionVersions, undefined))
     }
     // Record
     debug('recording digest for %s', name)
@@ -593,7 +513,7 @@ async function deployActionFromCodeOrSequence(action: ActionSpec, spec: DeploySt
       map[name] = { version: response.version, digest }
     }
     const namespace = response.namespace.split('/')[0]
-    const success = wrapSuccess(name, 'action', false, action.wrapping, map, namespace)
+    const success = wrapSuccess(name, 'action', false, map, namespace)
     for (let i = 0; i < triggerResults.length; i++) {
       if (triggerResults[i] instanceof Error) {
         const err = triggerResults[i] as any

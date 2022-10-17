@@ -13,7 +13,7 @@
 
 import {
   DeployStructure, DeployResponse, DeploySuccess, DeployKind, ActionSpec, PackageSpec, Feedback,
-  DeployerAnnotation, WebResource, VersionMap, VersionEntry, BucketSpec, PathKind, ProjectReader, KeyVal
+  DeployerAnnotation, VersionMap, VersionEntry, PathKind, ProjectReader, KeyVal
 } from './deploy-struct'
 import { getUserAgent } from './api'
 import { XMLHttpRequest } from 'xmlhttprequest'
@@ -23,8 +23,6 @@ import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
 import simplegit from 'simple-git'
-import * as mime from 'mime-types'
-import * as mimedb from 'mime-db'
 import * as randomstring from 'randomstring'
 import * as crypto from 'crypto'
 import * as yaml from 'js-yaml'
@@ -47,19 +45,13 @@ export const SYSTEM_EXCLUDE_PATTERNS = ['.gitignore', '.DS_Store', '**/.git/**',
   '**/*.swx'
 ]
 
-// Flag indicating running in browser
-export let inBrowser = (typeof process === 'undefined') || (!process.release) || (process.release.name !== 'node')
-
-export function setInBrowserFlag(value: boolean): void {
-  inBrowser = value
-}
 //
 // General utilities
 //
 
 // Read the project config file, with validation
 export async function loadProjectConfig(configFile: string, envPath: string, buildEnvPath: string, filePath: string, reader: ProjectReader,
-  feedback: Feedback, runtimesConfig: RuntimesConfig): Promise<DeployStructure> {
+  feedback: Feedback): Promise<DeployStructure> {
   return reader.readFileContents(configFile).then(async data => {
     try {
       // Read the config, substituting from env
@@ -81,7 +73,7 @@ export async function loadProjectConfig(configFile: string, envPath: string, bui
       // (packages contain actions).
       renameFunctionsToActions(config)
       // Check config
-      const configError = validateDeployConfig(config, runtimesConfig)
+      const configError = await validateDeployConfig(config)
       if (configError) {
         throw new Error(configError)
       } else {
@@ -141,7 +133,6 @@ export function isRealBuild(buildField: string): boolean {
   switch (buildField) {
     case 'build.sh':
     case 'build.cmd':
-    case '.build':
     case 'package.json':
       return true
     default:
@@ -160,27 +151,18 @@ function locateBuild(buildField: string, remoteRequested: boolean, defaultRemote
     } // else does not meet remote-default conditions
     return buildField
   } // else it's a real build. Check conditions for remote.
-  if (inBrowser || remoteRequired || (remoteRequested && !localRequired)) {
+  if (remoteRequired || (remoteRequested && !localRequired)) {
     return 'remote'
   } // else does not meet conditions for remote
   return buildField
 }
 
 // Set up the build fields for a project and detect conflicts.  Determine if local building is required.
-export async function checkBuildingRequirements(todeploy: DeployStructure, requestRemote: boolean, runtimes: RuntimesConfig): Promise<boolean> {
+export async function checkBuildingRequirements(todeploy: DeployStructure, requestRemote: boolean): Promise<boolean> {
   const checkConflicts = (buildField: string, remote: boolean, local: boolean, tag: string) => {
     if (remote && local) {
       throw new Error(`Local and remote building cannot both be required (${tag})`)
     }
-    if (remote && buildField === '.build') {
-      throw new Error(`Remote building cannot be required when using a '.build' directive (${tag})`)
-    }
-    if (local && inBrowser) {
-      throw new Error(`Local building required but cannot occur in the workbench; use the CLI (${tag})`)
-    }
-  }
-  if (todeploy.bucket) {
-    checkConflicts(todeploy.webBuild, todeploy.bucket.remoteBuild, todeploy.bucket.localBuild, 'web')
   }
   if (todeploy.packages) {
     for (const pkg of todeploy.packages) {
@@ -191,14 +173,12 @@ export async function checkBuildingRequirements(todeploy: DeployStructure, reque
       }
     }
   }
-  const webRequiresLocal = (todeploy.bucket && todeploy.bucket.localBuild) || !!todeploy.actionWrapPackage
-  todeploy.webBuild = locateBuild(todeploy.webBuild, requestRemote, false, todeploy.bucket && todeploy.bucket.remoteBuild, webRequiresLocal)
-  let needsLocal = todeploy.webBuild !== 'remote' && isRealBuild(todeploy.webBuild)
+  let needsLocal = false
   if (todeploy.packages) {
     for (const pkg of todeploy.packages) {
       if (pkg.actions) {
         for (const action of pkg.actions) {
-          const defaultRemote = await hasDefaultRemote(action, todeploy.reader, runtimes)
+          const defaultRemote = await hasDefaultRemote(action, todeploy.reader)
           action.build = locateBuild(action.build, requestRemote, defaultRemote, action.remoteBuild, action.localBuild)
           needsLocal = needsLocal || (!action.build?.startsWith('remote') && isRealBuild(action.build))
         }
@@ -211,8 +191,8 @@ export async function checkBuildingRequirements(todeploy: DeployStructure, reque
 // Determine if an action has a default remote build.  This depends on the action's 'kind': currently, swift and go have a
 // default remote build while other languages do not.   This function is designed to be called before the runtime is otherwise
 // known so it is prepared to peek into the project to figure out the operative runtime.
-async function hasDefaultRemote(action: ActionSpec, reader: ProjectReader, runtimes: RuntimesConfig): Promise<boolean> {
-  const runtime = await getRuntimeForAction(action, reader, runtimes)
+async function hasDefaultRemote(action: ActionSpec, reader: ProjectReader): Promise<boolean> {
+  const runtime = await getRuntimeForAction(action, reader)
   if (!runtime) {
     return false 
   }
@@ -227,7 +207,7 @@ async function hasDefaultRemote(action: ActionSpec, reader: ProjectReader, runti
   }
 }
 
-export async function getRuntimeForAction(action: ActionSpec, reader: ProjectReader, runtimes: RuntimesConfig): Promise<string> {
+export async function getRuntimeForAction(action: ActionSpec, reader: ProjectReader): Promise<string> {
   if (action.runtime) {
     return action.runtime
   }
@@ -237,11 +217,11 @@ export async function getRuntimeForAction(action: ActionSpec, reader: ProjectRea
   const pathKind = await reader.getPathKind(action.file)
   if (pathKind.isFile) {
     let runtime: string
-    ({ runtime } = actionFileToParts(pathKind.name, runtimes))
+    ({ runtime } = await actionFileToParts(pathKind.name))
     return runtime
   } else if (pathKind.isDirectory) {
     const files = await promiseFilesAndFilterFiles(action.file, reader)
-    return agreeOnRuntime(files, runtimes)
+    return agreeOnRuntime(files)
   } else {
     return ''
   }
@@ -249,10 +229,10 @@ export async function getRuntimeForAction(action: ActionSpec, reader: ProjectRea
 
 // Check whether a list of names that are candidates for zipping can agree on a runtime.  This is called only when the
 // config doesn't already provide a runtime or on the raw material in the case of remote builds.
-export function agreeOnRuntime(items: string[], runtimes: RuntimesConfig): string {
+export async function agreeOnRuntime(items: string[]): Promise<string> {
   let agreedRuntime: string
-  items.forEach(item => {
-    const { runtime } = actionFileToParts(item, runtimes)
+  items.forEach(async item => {
+    const { runtime } = await actionFileToParts(item)
     if (runtime) {
       if (agreedRuntime && runtime !== agreedRuntime) {
         return undefined
@@ -269,25 +249,7 @@ function removeEmptyStringMembers(config: DeployStructure) {
   if (config.targetNamespace && config.targetNamespace === '') {
     delete config.targetNamespace
   }
-  if (config.actionWrapPackage && config.actionWrapPackage === '') {
-    delete config.targetNamespace
-  }
-  removeEmptyStringMembersFromBucket(config.bucket)
   removeEmptyStringMembersFromPackages(config.packages)
-}
-
-// Remove empty optional string-valued members from a bucket spec
-function removeEmptyStringMembersFromBucket(bucket: BucketSpec) {
-  if (!bucket) return
-  if (bucket.mainPageSuffix && bucket.mainPageSuffix === '') {
-    delete bucket.mainPageSuffix
-  }
-  if (bucket.notFoundPage && bucket.notFoundPage === '') {
-    delete bucket.notFoundPage
-  }
-  if (bucket.prefixPath && bucket.prefixPath === '') {
-    delete bucket.prefixPath
-  }
 }
 
 // Remove empty optional string-valued members from an array of PackageSpecs
@@ -307,10 +269,8 @@ function removeEmptyStringMembersFromPackages(packages: PackageSpec[]) {
   }
 }
 
-// Validation for DeployStructure read from disk.  Note: this may be any valid DeployStructure except that the strays member
-// is not expected in this context.  TODO return a list of errors not just the first error.
-export function validateDeployConfig(arg: any, runtimesConfig: RuntimesConfig): string {
-  let haveActionWrap = false; let haveBucket = false
+// Validation for DeployStructure read from disk.
+export async function validateDeployConfig(arg: any): Promise<string> {
   const isNimbellaDeploy = arg.targetNamespace === 'nimbella'
   const slice = !!arg.slice
   for (const item in arg) {
@@ -329,42 +289,15 @@ export function validateDeployConfig(arg: any, runtimesConfig: RuntimesConfig): 
         }
         break
       }
-      case 'web': {
-        if (!Array.isArray(arg[item])) {
-          return 'web member must be an array'
-        }
-        for (const subitem of arg[item]) {
-          const webError = validateWebResource(subitem)
-          if (webError) {
-            return webError
-          }
-        }
-        break
-      }
       case 'packages': {
         if (!Array.isArray(arg[item])) {
           return 'packages member must be an array'
         }
         for (const subitem of arg[item]) {
-          const pkgError = validatePackageSpec(subitem, runtimesConfig, slice, isNimbellaDeploy)
+          const pkgError = await validatePackageSpec(subitem, slice, isNimbellaDeploy)
           if (pkgError) {
             return pkgError
           }
-        }
-        break
-      }
-      case 'actionWrapPackage': {
-        if (!(typeof arg[item] === 'string')) {
-          return `${item} member must be a string`
-        }
-        haveActionWrap = arg[item].length > 0
-        break
-      }
-      case 'bucket': {
-        haveBucket = true
-        const optionsError = validateBucketSpec(arg[item])
-        if (optionsError) {
-          return optionsError
         }
         break
       }
@@ -386,9 +319,6 @@ export function validateDeployConfig(arg: any, runtimesConfig: RuntimesConfig): 
         return `Invalid key '${item}' found in project.yml`
     }
   }
-  if (haveActionWrap && haveBucket) {
-    return 'At most one of actionWrapPackage and bucket may be specified (config specifies both)'
-  }
   return undefined
 }
 
@@ -402,57 +332,8 @@ function isValidOwnership(item: any): boolean {
   return isDictionary(item) && (typeof item.production === 'string' || typeof item.test === 'string')
 }
 
-// Validator for BucketSpec
-function validateBucketSpec(arg: Record<string, any>): string {
-  for (const item in arg) {
-    switch (item) {
-      case 'prefixPath':
-      case 'mainPageSuffix':
-      case 'notFoundPage':
-        if (!(typeof arg[item] === 'string')) {
-          return `'${item}' member of 'bucket' must be a string`
-        }
-        break
-      case 'strip':
-        if (!(typeof arg[item] === 'number')) {
-          return `'${item}' member of 'bucket' must be a number`
-        }
-        break
-      case 'clean':
-      case 'useCache':
-      case 'remoteBuild':
-      case 'localBuild':
-        if (!(typeof arg[item] === 'boolean')) {
-          return `'${item}' member of 'bucket' must be a boolean`
-        }
-        break
-      default:
-        return `Invalid key '${item}' found in 'bucket' in project.yml`
-    }
-  }
-  return undefined
-}
-
-// Validator for a WebResource
-function validateWebResource(arg: Record<string, any>): string {
-  for (const item in arg) {
-    switch (item) {
-      case 'simpleName':
-      case 'mimeType':
-        break
-      default:
-        return `Invalid key '${item}' found in 'web' in project.yml`
-    }
-    if (!(typeof arg[item] === 'string')) {
-      return `'${item}' member of a 'web' must be a string`
-    }
-  }
-  return undefined
-}
-
 // Validator for a PackageSpec
-function validatePackageSpec(arg: Record<string, any>, runtimesConfig: RuntimesConfig, slice: boolean,
-    isNimbella: boolean): string {
+async function validatePackageSpec(arg: Record<string, any>, slice: boolean, isNimbella: boolean): Promise<string> {
   const isDefault = arg.name === 'default'
   for (const item in arg) {
     if (!arg[item]) continue
@@ -465,7 +346,7 @@ function validatePackageSpec(arg: Record<string, any>, runtimesConfig: RuntimesC
         return "actions member of a 'package' must be an array"
       }
       for (const subitem of arg[item]) {
-        const actionError = validateActionSpec(subitem, runtimesConfig, isNimbella)
+        const actionError = await validateActionSpec(subitem, isNimbella)
         if (actionError) {
           return actionError
         }
@@ -502,7 +383,7 @@ function validatePackageSpec(arg: Record<string, any>, runtimesConfig: RuntimesC
 }
 
 // Validator for ActionSpec
-function validateActionSpec(arg: Record<string, any>, runtimesConfig: RuntimesConfig, isNimbella: boolean): string {
+async function validateActionSpec(arg: Record<string, any>, isNimbella: boolean): Promise<string> {
   for (const item in arg) {
     if (!arg[item]) continue
     switch (item) {
@@ -514,7 +395,7 @@ function validateActionSpec(arg: Record<string, any>, runtimesConfig: RuntimesCo
         if (!(typeof arg[item] === 'string')) {
           return `'${item}' member of an 'action' must be a string`
         }
-        if (item === 'runtime' && Object.keys(runtimesConfig).length > 0 && !isValidRuntime(runtimesConfig, arg[item])) {
+        if (item === 'runtime' && !await isValidRuntime(arg[item])) {
           return `'${arg[item]}' is not a valid runtime value`
         }
         break
@@ -754,7 +635,7 @@ export function makeDict(keyVal: KeyVal[]): Dict {
 
 // Provide an empty DeployStructure with all array and object members defined but empty
 export function emptyStructure(): DeployStructure {
-  return { web: [], packages: [], strays: [] }
+  return { packages: [], strays: [] }
 }
 
 // Provide an empty DeployStructure that records an error
@@ -800,9 +681,9 @@ export function straysToResponse(strays: string[]): DeployResponse {
 }
 
 // Wrap a single success as a DeployResponse
-export function wrapSuccess(name: string, kind: DeployKind, skipped: boolean, wrapping: string, actionVersions: VersionMap,
+export function wrapSuccess(name: string, kind: DeployKind, skipped: boolean, actionVersions: VersionMap,
   namespace: string): DeployResponse {
-  const success: DeploySuccess = { name, kind, skipped, wrapping }
+  const success: DeploySuccess = { name, kind, skipped }
   return { successes: [success], failures: [], ignored: [], namespace, packageVersions: {}, actionVersions }
 }
 
@@ -842,7 +723,7 @@ export function getTargetNamespace(client: Client): Promise<string> {
 }
 
 // Process an action file name, producing 'name', 'binary', 'zipped' and 'runtime' parts
-export function actionFileToParts(fileName: string, runtimes: RuntimesConfig): { name: string, binary: boolean, zipped: boolean, runtime: string } {
+export async function actionFileToParts(fileName: string): Promise<{ name: string, binary: boolean, zipped: boolean, runtime: string }> {
   let runtime: string
   let binary: boolean
   let zipped: boolean
@@ -859,7 +740,7 @@ export function actionFileToParts(fileName: string, runtimes: RuntimesConfig): {
     } else {
       name = parts.slice(0, -1).join('.')
     }
-    runtime = mid ? runtimeForZipMid(runtimes, mid) : runtimeForFileExtension(ext)
+    runtime = mid ? await runtimeForZipMid(mid) : runtimeForFileExtension(ext)
     binary = isBinaryFileExtension(ext)
     zipped = ext === 'zip'
   } else {
@@ -1080,48 +961,6 @@ function getPropsFromFile(filePath: string): Record<string, string> {
   const propParser = require('dotenv')
   // The dotenv parser doesn't throw but returns the empty object if malformed
   return propParser.parse(contents)
-}
-
-// Convert an array of names to an array of WebResources.
-export function convertToResources(names: string[], dropInitial: number): WebResource[] {
-  return names.map(filePath => {
-    const simpleName = filePath.substring(dropInitial)
-    const mimeType = mime.lookup(simpleName) || undefined
-    return { filePath, simpleName, mimeType }
-  })
-}
-
-// Determine if a mime type is a "text" type (non-binary), should not be base64 encoded in the final html)
-let binaryMimeTypes: Set<string>
-
-export function isTextType(mimeType: string): boolean {
-  if (!binaryMimeTypes) {
-    binaryMimeTypes = loadBinaryMimeTypes()
-  }
-  return binaryMimeTypes ? !binaryMimeTypes.has(mimeType) : true // If we aren't sure it's binary, consider it text
-}
-
-// Load the binary mimetypes.  We remember the binary ones rather than the text ones because we expect they are fewer in number
-function loadBinaryMimeTypes(): Set<string> {
-  const db: mimedb.MimeDatabase = require('mime-db')
-  const entries = Object.entries(db)
-  const ans = new Set<string>()
-  entries.forEach(entry => {
-    if (entry[1].compressible === false) { // only consider false if explicitly (boolean) false ... default if omitted is true
-      ans.add(entry[0])
-    }
-  })
-  debug('%d binary mime-types were found in the database', ans.size)
-  return ans
-}
-
-// Convert an array of pairs with old and new names to an array of WebResources, where the new name is (in general) a truncation of the old name
-export function convertPairsToResources(pairs: string[][]): WebResource[] {
-  return pairs.map(pair => {
-    const [filePath, simpleName] = pair
-    const mimeType = mime.lookup(simpleName) || undefined
-    return { filePath, simpleName, mimeType }
-  })
 }
 
 // Types for the map versions of the PackageSpec and ActionSpec types

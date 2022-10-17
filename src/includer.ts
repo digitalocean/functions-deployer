@@ -26,7 +26,6 @@ export function makeIncluder(include: string, exclude: string): Includer {
 
 // The implementation behind the Includer interface
 class IncluderImpl implements Includer {
-    isWebIncluded = false
     isExcludingOnly = false
     includedPackages: Set<string> = new Set()
     excludedPackages: Set<string> = new Set()
@@ -36,14 +35,9 @@ class IncluderImpl implements Includer {
     // Construct
     constructor(includes: string[], excludes: string[]) {
       if (!includes) {
-        this.isWebIncluded = true
         this.isExcludingOnly = true
       } else {
         for (let token of includes) {
-          if (token === 'web') {
-            this.isWebIncluded = true
-            continue
-          }
           if (token.endsWith('/')) {
             token = token.slice(0, -1)
           }
@@ -57,10 +51,6 @@ class IncluderImpl implements Includer {
       }
       if (excludes) {
         for (let token of excludes) {
-          if (token === 'web') {
-            this.isWebIncluded = false
-            continue
-          }
           if (token.endsWith('/')) {
             token = token.slice(0, -1)
           }

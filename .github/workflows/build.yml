@@ -20,7 +20,3 @@ jobs:
       run: npm ci
     - name: Check build process
       run: npm pack
-    - name: Run unit tests
-      run: npm test
-    - name: Smoke test built library
-      run: npm run smoke-test
