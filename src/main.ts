@@ -11,11 +11,13 @@
  * governing permissions and limitations under the License.
  */
 
-import { readAndPrepare, buildProject, deploy } from './api'
+import { readAndPrepare, readProject, buildProject, deploy } from './api'
 import { Flags, OWOptions, DeployResponse, Credentials, Feedback } from './deploy-struct'
 import { isGithubRef } from './github'
 import { getGithubAuth } from './credentials'
 import { deleteSlice } from './slice-reader'
+import { makeIncluder } from './includer'
+import { getRuntimeForAction, renameActionsToFunctions } from './util'
 import * as path from 'path'
 import { default as parser } from 'yargs-parser'
 
@@ -56,18 +58,18 @@ class DefaultLogger implements Logger {
   }
 
   logJSON(entity: Record<string, unknown>): void {
-    console.log(entity)
+    console.log(JSON.stringify(entity, null, 2))
   }
 
   logTable(data: Record<string, unknown>[], columns: Record<string, unknown>, options: Record<string, unknown> = {}): void {
-    console.log(data)
+    console.log(JSON.stringify(data, null, 2))
   }
 
   logOutput(json: Record<string, unknown>, msgs: string[]): void {
     for (const msg of msgs) {
       console.log(msg)
     }
-    console.log(json)
+    console.log(JSON.stringify(json, null, 2))
   }
 }
 
@@ -222,7 +224,36 @@ async function doDeploy(project: string, flags: Flags, logger: Logger): Promise<
     }
 }
 
+// Command to retrieve project description metadata
 async function doGetMetadata(project: string, flags: Flags, logger: Logger): Promise<void> {
+    const isGithub = isGithubRef(project)
+    if (isGithub && !getGithubAuth()) {
+      logger.handleError(`you don't have GitHub authorization.  Deploy from github not enabled.`)
+    }
+    // Convert include/exclude flags into an Includer object
+    const includer = makeIncluder(flags.include, flags.exclude)
+
+    // Read the project
+    const result = await readProject(project, flags.env, undefined, includer, false, undefined)
+    if (result.error && !result.unresolvedVariables) {
+      logger.handleError('  ', result.error)
+    }
+
+    // Fill in any missing runtimes
+    if (result.packages && !result.unresolvedVariables) {
+      // Too dangerous to attempt this if the parse wasn't perfect
+      for (const pkg of result.packages) {
+        if (pkg.actions) {
+          for (const action of pkg.actions) {
+            action.runtime = await getRuntimeForAction(action, result.reader)
+          }
+        }
+      }
+    }
+
+    // Display result
+    renameActionsToFunctions(result)
+    logger.logJSON(result)
 
 }
 
