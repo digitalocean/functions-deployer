@@ -1,14 +1,17 @@
 {
-  "name": "@nimbella/nimbella-deployer",
-  "version": "4.3.10",
-  "description": "The Nimbella platform deployer library",
+  "name": "@digitalocean/functions-deployer",
+  "version": "5.0",
+  "description": "The the functions deployer for DigitalOcean",
   "main": "lib/index.js",
   "repository": {
     "type": "git",
     "url": "https://github.com/nimbella/nimbella-deployer.git"
   },
+  "bin": {
+    "funcdeploy": "./bin/run"
+  },
   "keywords": [],
-  "author": "Nimbella Corporation",
+  "author": "DigitalOcean",
   "license": "Apache-2.0",
   "dependencies": {
     "@aws-sdk/client-s3": "^3.186.0",
@@ -31,7 +34,8 @@
     "rimraf": "^3.0.1",
     "simple-git": "^3.6.0",
     "touch": "^3.1.0",
-    "xmlhttprequest": "^1.8.0"
+    "xmlhttprequest": "^1.8.0",
+    "yargs-parser": "^21.1.1"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.4.33",
@@ -42,6 +46,7 @@
     "@types/rimraf": "^3.0.0",
     "@types/swagger-schema-official": "2.0.15",
     "@types/touch": "^3.1.1",
+    "@types/yargs-parser": "^21.0.0",
     "esbuild": "^0.14.36",
     "esbuild-node-externals": "^1.4.1",
     "typescript": "^3.9.9"

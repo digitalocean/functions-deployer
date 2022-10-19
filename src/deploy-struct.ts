@@ -83,7 +83,6 @@ export interface SchedulerSourceDetails {
 export interface Flags {
     verboseBuild: boolean
     verboseZip: boolean
-    production: boolean
     incremental: boolean
     yarn: boolean
     env: string|undefined
