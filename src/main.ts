@@ -12,7 +12,7 @@
  */
 
 import { readAndPrepare, buildProject, deploy } from './api'
-import { Flags, OWOptions, DeployResponse, Credentials, Feedback, DefaultFeedback } from './deploy-struct'
+import { Flags, OWOptions, DeployResponse, Credentials, Feedback } from './deploy-struct'
 import { isGithubRef } from './github'
 import { getGithubAuth } from './credentials'
 import { deleteSlice } from './slice-reader'
@@ -161,11 +161,7 @@ export async function flush() {
 
 // Deal with errors thrown from within the deployer
 export function handleError(err: any) {
-    let msg = err.message
-    if (!msg && 'string' === typeof err) {
-      msg = err
-    }
-    console.log(JSON.stringify({ error: msg || 'Unknown error' }, null, 2))
+    console.error(err)
     process.exit(1)
 }
 
@@ -218,10 +214,8 @@ async function doDeploy(project: string, flags: Flags, logger: Logger): Promise<
     if (isGithub && !getGithubAuth()) {
       logger.handleError(`you don't have GitHub authorization.  Deploy from github not enabled.`)
     }
-    this.debug('cmdFlags', flags)
     const { insecure, apiHost: apihost, auth } = flags
     const creds = await processCredentials(insecure, apihost, auth)
-    this.debug('creds', creds)
 
     if (!await deployProject(project, flags, creds, false, logger)) {
       process.exit(1)

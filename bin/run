@@ -15,4 +15,4 @@
 
 require('../lib/index').main()
 .then(require('../lib/index').flush)
-.catch(require('../lib/index').handle)
+.catch(require('../lib/index').handleError)
