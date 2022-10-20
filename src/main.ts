@@ -18,14 +18,18 @@ import { getGithubAuth } from './credentials'
 import { deleteSlice } from './slice-reader'
 import { makeIncluder } from './includer'
 import { getRuntimeForAction, renameActionsToFunctions } from './util'
+import { watch } from './watch'
 import * as path from 'path'
 import { default as parser } from 'yargs-parser'
 
 // Provides a limited purpose main function for the deployer
 //main().then(flush).catch(handleError)
 
+// Also provides a library entry point (runCommand) which abstracts the output
+// of the main function so it can be captured.
+
 // The Logger type is adopted from the nim CLI
-interface Logger {
+export interface Logger {
   log: (msg: string, ...args: any[]) => void
   handleError: (msg: string, err?: Error) => never
   exit: (code: number) => void // don't use 'never' here because 'exit' doesn't always exit
@@ -123,7 +127,7 @@ export class CaptureLogger implements Logger {
 }
 
 // Wrap a Logger in a Feedback for using the deployer API.
-export class LoggerFeedback implements Feedback {
+class LoggerFeedback implements Feedback {
   logger: Logger
   warnOnly: boolean
   constructor(logger: Logger) {
@@ -141,24 +145,8 @@ export class LoggerFeedback implements Feedback {
 }
 
 // Ensure that console output is flushed when the command is really finished
-// Note: this logic is adopted from oclif's cli-ux flush function.
 export async function flush() {
-    function timeout(p, ms) {
-        function wait(ms, unref = false) {
-            return new Promise(resolve => {
-                const t = setTimeout(() => resolve(undefined), ms);
-                if (unref)
-                   t.unref();
-            });
-        }
-        return Promise.race([p, wait(ms, true).then(() => exports.ux.error('timed out'))]);
-    }
-    async function flush() {
-        const p = new Promise(resolve => process.stdout.once('drain', () => resolve(undefined)));
-         process.stdout.write('');
-         return p;
-    }
-    await timeout(flush(), 10000);
+    process.stdout.once('drain', () => process.exit(0))
 }
 
 // Deal with errors thrown from within the deployer
@@ -177,9 +165,15 @@ const parsing = {
   }
 }
 
-// Main function.  Covers what used to be in the 'nim project' tree and that continues to be needed in DigitalOcean
-export async function main() {
-  const logger = new DefaultLogger()
+// Main function.  The thinnest possible shell around 'runCommand' which is a library-level entry
+// point suitable for use by a reduced doctl plugin.  The only thing added here is the default logger,
+// which simply causes output to go directly to the console.
+export function main(): Promise<void> {
+  return runCommand(new DefaultLogger())
+}
+
+// Primary library entry point for running the commands with an arbitrary Logger
+export async function runCommand(logger: Logger) {
   const parsed = parser(process.argv.slice(2), parsing)
   const args = parsed._ as string[]
   const badFlags = args.filter(arg => arg.startsWith('-'))
@@ -192,6 +186,13 @@ export async function main() {
   const [ cmd, project ] = args
   const { env, buildEnv, apihost, auth, include, exclude, insecure, verboseBuild, verboseZip, yarn, remoteBuild, incremental, json } = parsed
   const flags: Flags = { env, buildEnv, apiHost: apihost, auth, include, exclude, insecure, verboseBuild, verboseZip, yarn, remoteBuild, incremental, json }
+  const isGithub = isGithubRef(project)
+  if (incremental && isGithub) {
+      logger.handleError('\'--incremental\' may not be used with GitHub projects')
+    }
+  if (isGithub && !getGithubAuth()) {
+      logger.handleError(`you don't have GitHub authorization.  Deploy from github not enabled.`)
+  }
   switch (cmd) {
     case 'deploy':
       await doDeploy(project, flags, logger)
@@ -209,16 +210,8 @@ export async function main() {
 
 // Command to do deployment
 async function doDeploy(project: string, flags: Flags, logger: Logger): Promise<void> {
-    const isGithub = isGithubRef(project)
-    if (flags.incremental && isGithub) {
-      logger.handleError('\'--incremental\' may not be used with GitHub projects')
-    }
-    if (isGithub && !getGithubAuth()) {
-      logger.handleError(`you don't have GitHub authorization.  Deploy from github not enabled.`)
-    }
     const { insecure, apiHost: apihost, auth } = flags
     const creds = await processCredentials(insecure, apihost, auth)
-
     if (!await deployProject(project, flags, creds, false, logger)) {
       process.exit(1)
     }
@@ -226,10 +219,6 @@ async function doDeploy(project: string, flags: Flags, logger: Logger): Promise<
 
 // Command to retrieve project description metadata
 async function doGetMetadata(project: string, flags: Flags, logger: Logger): Promise<void> {
-    const isGithub = isGithubRef(project)
-    if (isGithub && !getGithubAuth()) {
-      logger.handleError(`you don't have GitHub authorization.  Deploy from github not enabled.`)
-    }
     // Convert include/exclude flags into an Includer object
     const includer = makeIncluder(flags.include, flags.exclude)
 
@@ -254,16 +243,18 @@ async function doGetMetadata(project: string, flags: Flags, logger: Logger): Pro
     // Display result
     renameActionsToFunctions(result)
     logger.logJSON(result)
-
 }
 
+// Command to do a project watch.  
 async function doWatch(project: string, flags: Flags, logger: Logger): Promise<void> {
-
+  const { insecure, apiHost: apihost, auth } = flags
+  const creds = await processCredentials(insecure, apihost, auth)
+  watch(project, flags, creds, logger)
 }
 
 // Set up credentials based on flags if supplied.  Otherwise, credentials will be undefined until later, either based on
 // targetNamespace in the project.yml or else just the current connected namespace.
-export async function processCredentials(ignore_certs: boolean, apihost: string|undefined, auth: string|undefined): Promise<Credentials> {
+async function processCredentials(ignore_certs: boolean, apihost: string|undefined, auth: string|undefined): Promise<Credentials> {
   const owOptions: OWOptions = { ignore_certs } // No explicit undefined
   if (apihost) {
     owOptions.apihost = parseAPIHost(apihost)
@@ -279,7 +270,7 @@ export async function processCredentials(ignore_certs: boolean, apihost: string|
 }
 
 // Utility to parse the value of an --apihost flag, permitting certain abbreviations
-export function parseAPIHost(host: string | undefined): string | undefined {
+function parseAPIHost(host: string | undefined): string | undefined {
   if (!host) {
     return undefined
   }
@@ -397,7 +388,7 @@ function displayResult(result: DeployResponse, watching: boolean, logger: Logger
       }
     }
     if (actions.length > 0) {
-      logger.log("Deployed functions ('doctl sbx fn get <funcName> --url' for URL):")
+      logger.log("Deployed functions ('doctl sls fn get <funcName> --url' for URL):")
       for (const action of actions) {
         logger.log(`  - ${action}`)
       }
