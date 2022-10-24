@@ -40,7 +40,7 @@ export interface Logger {
 }
 
 // The default logger implementation
-class DefaultLogger implements Logger {
+export class DefaultLogger implements Logger {
   log(msg = '', ...args: any[]): void {
     console.log(msg, ...args)
   }
