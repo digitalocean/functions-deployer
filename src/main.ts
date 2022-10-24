@@ -169,12 +169,12 @@ const parsing = {
 // point suitable for use by a reduced doctl plugin.  The only thing added here is the default logger,
 // which simply causes output to go directly to the console.
 export function main(): Promise<void> {
-  return runCommand(new DefaultLogger())
+  return runCommand(process.argv.slice(2), new DefaultLogger())
 }
 
 // Primary library entry point for running the commands with an arbitrary Logger
-export async function runCommand(logger: Logger) {
-  const parsed = parser(process.argv.slice(2), parsing)
+export async function runCommand(inputArgs: string[], logger: Logger) {
+  const parsed = parser(inputArgs, parsing)
   const args = parsed._ as string[]
   const badFlags = args.filter(arg => arg.startsWith('-'))
   if (badFlags.length > 0) {
@@ -201,6 +201,7 @@ export async function runCommand(logger: Logger) {
       await doGetMetadata(project, flags, logger)
       break
     case 'watch':
+      // Note: it is up to the caller to use a non-capturing Logger with watch
       await doWatch(project, flags, logger)
       break
     default:
