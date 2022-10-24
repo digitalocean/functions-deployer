@@ -217,7 +217,8 @@ export async function prepareToDeploy(inputSpec: DeployStructure, credentials: C
   debug('owOptions: %O', owOptions)
   debug('credentials.ow: %O', credentials.ow)
   // Merge and save credentials information
-  const wskoptions = Object.assign({}, credentials.ow, owOptions || {})
+  const wskoptions: OWOptions = { api_key: owOptions.api_key || credentials.ow.api_key, apihost: owOptions.apihost || credentials.ow.apihost,
+    ignore_certs: owOptions.ignore_certs || credentials.ow.ignore_certs }
   debug('wskoptions" %O', wskoptions)
   inputSpec.credentials = credentials
   debug('prepareToDeploy merging flags: %O', flags)
@@ -232,10 +233,6 @@ export async function prepareToDeploy(inputSpec: DeployStructure, credentials: C
     await isTargetNamespaceValid(inputSpec.owClient, credentials.namespace)
   }
   debug('Target namespace validated')
-  if (!flags.production && saveUsFromOurselves(credentials.namespace, credentials.ow.apihost)) {
-    return errorStructure(new Error(
-      `To deploy to namespace '${credentials.namespace}' on host '${credentials.ow.apihost}' you must specify the '--production' flag`))
-  }
   debug('Sensitive project/namespace guard passed')
   debug('returning spec %O', inputSpec)
   return Promise.resolve(inputSpec)
