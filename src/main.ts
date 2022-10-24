@@ -291,7 +291,7 @@ export async function deployProject(project: string, cmdFlags: Flags, creds: Cre
     feedback = new LoggerFeedback(new CaptureLogger())
     feedback.warnOnly = true
   } else {
-    feedback = new LoggerFeedback(new DefaultLogger())
+    feedback = new LoggerFeedback(logger)
   }
 
   let todeploy = await readAndPrepare(project, creds, cmdFlags, feedback)
