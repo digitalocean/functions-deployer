@@ -1,4 +1,5 @@
 lib
 node_modules
-digitalocean-functions-deployer*.tgz
+*.tgz
 *.bak
+dosls
