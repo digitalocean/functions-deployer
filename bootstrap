@@ -1,6 +1,5 @@
 #/bin/bash
-SELF="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+REAL=$(readlink -f "${BASH_SOURCE[0]}")
+SELF=$(dirname "$REAL")
 cd $SELF
 ./node ./node_modules/.bin/dosls $*
-
-
