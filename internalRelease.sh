@@ -1,8 +1,9 @@
 #!/bin/bash
 
 # Creates and uploads a build of the deployer for incorporation into other DigitalOcean tools.
+# With the --test flag, creates artifacts without uploading.  
 
-# Two artifacts are uploaded.
+# Two artifacts are created / uploaded.
 # 1. A tarball resulting from 'npm pack' and suitable for installation as a dependency.
 # 2. A complete installation tarball for ubuntu (suitable for incorporating dosls into runtimes).
 
@@ -22,6 +23,14 @@ nodeVersion="v16.13.0"
 nodeDir="node-${nodeVersion}-linux-x64"
 NODE_DOWNLOAD=https://nodejs.org/dist/${nodeVersion}/${nodeDir}.tar.gz
 
+TESTING=
+if [ "$1" == "--test" ]; then
+  TESTING=true
+elif [ -n "$2" ]; then
+  echo "unexpected argument: $1"
+  exit 1
+fi
+
 SELFDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd $SELFDIR
 
@@ -35,11 +44,13 @@ FAT_TARBALL_NAME="dosls-$VERSION.tgz"
 echo "The dependency tarball is $TARBALL_NAME"
 echo "The complete install tarball for Linux is $FAT_TARBALL_NAME"
 
-echo "Checking whether this version is already uploaded"
-UPLOADED=$($AWS s3api head-object --bucket "$TARGET_SPACE" --key "$TARBALL_NAME")
-if [ "$?" == "0" ]; then
-  echo "$TARBALL_NAME has already been built and uploaded.  Skipping remaining steps."
-  exit 0
+if [ -z "$TESTING" ]; then
+  echo "Checking whether this version is already uploaded"
+  UPLOADED=$($AWS s3api head-object --bucket "$TARGET_SPACE" --key "$TARBALL_NAME")
+  if [ "$?" == "0" ]; then
+    echo "$TARBALL_NAME has already been built and uploaded.  Skipping remaining steps."
+    exit 0
+  fi
 fi
 
 set -e
@@ -53,9 +64,11 @@ npm install
 echo "Building the simple tarball"
 npm pack
 
-echo "Uploading the simple tarball"
-$AWS s3 cp "$TARBALL_NAME" "s3://$TARGET_SPACE/$TARBALL_NAME"
-$AWS s3api put-object-acl --bucket "$TARGET_SPACE" --key "$TARBALL_NAME" --acl public-read
+if [ -z "$TESTING" ]; then
+  echo "Uploading the simple tarball"
+  $AWS s3 cp "$TARBALL_NAME" "s3://$TARGET_SPACE/$TARBALL_NAME"
+  $AWS s3api put-object-acl --bucket "$TARGET_SPACE" --key "$TARBALL_NAME" --acl public-read
+fi
 
 echo "Creating node_modules for the full install"
 rm -fr dosls
@@ -76,6 +89,11 @@ cp ../bootstrap .
 echo "Making the installation tarball (linux amd64 only)"
 cd ..
 tar czf "$FAT_TARBALL_NAME" dosls
+
+if [ -n "$TESTING" ]; then
+  echo "Test build is complete"
+  exit
+fi
 
 echo "Uploading the installation tarball"
 $AWS s3 cp "$FAT_TARBALL_NAME" "s3://$TARGET_SPACE/$FAT_TARBALL_NAME"

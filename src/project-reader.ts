@@ -266,7 +266,7 @@ function buildActionsPart(pkgsdir: string, displayPath: string, includer: Includ
   if (!pkgsdir) {
     return Promise.resolve(emptyStructure())
   } else {
-    return buildPkgArray(pkgsdir, displayPath, includer, reader).then((values) => {
+    return buildPkgArray(pkgsdir, displayPath + "/packages", includer, reader).then((values) => {
       const [strays, pkgs] = values
       return { web: [], packages: pkgs, strays: strays }
     })
