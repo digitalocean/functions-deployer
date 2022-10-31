@@ -540,7 +540,7 @@ function validateScheduledTriggerDetails(details: ScheduledSourceDetails): strin
 
   for (const item of Object.keys(details)) {
     if (!['cron', 'body'].includes(item)) {
-      return `Invalid key '${item}' found in schedulerDetails in project.yml`
+      return `Invalid key '${item}' found in scheduledDetails in project.yml`
     }
   }
 
@@ -548,7 +548,7 @@ function validateScheduledTriggerDetails(details: ScheduledSourceDetails): strin
   const body = details.body;
 
   if (typeof cron !== 'string') {
-    return `the 'cron' member of scheduler 'sourceDetails' must be a string`
+    return `the 'cron' member of 'scheduledDetails' must be a string`
   }
 
   if (!isValidCron(cron)) {
@@ -559,7 +559,7 @@ function validateScheduledTriggerDetails(details: ScheduledSourceDetails): strin
   }
 
   if (body && !isDictionary(body)) {
-    return `the 'body' member of schedulerDetails must be a dictionary`
+    return `the 'body' member of scheduledDetails must be a dictionary`
   }
 }
 
