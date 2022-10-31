@@ -1,4 +1,4 @@
-#/bin/bash
+#!/usr/bin/env bash
 REAL=$(readlink -f "${BASH_SOURCE[0]}")
 SELF=$(dirname "$REAL")
 "$SELF/node" "$SELF/node_modules/.bin/dosls" $*
