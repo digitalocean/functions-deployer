@@ -72,22 +72,25 @@ export async function loadProjectConfig(configFile: string, envPath: string, bui
       // Adjust from the external convention (packages contain functions) to the internal one
       // (packages contain actions).
       renameFunctionsToActions(config)
+
+      // Add build environment if specified
+      if (buildEnvPath) {
+        config.buildEnv = getPropsFromFile(buildEnvPath)
+      }
+
+      config.unresolvedVariables = badVars
+      if (badVars && badVars.length > 0) {
+        const formatted = "'" + badVars.join("', '") + "'"
+        config.error =  new Error('The following substitutions could not be resolved: ' + formatted)
+      }
+
       // Check config
       const configError = await validateDeployConfig(config)
       if (configError) {
         throw new Error(configError)
       } else {
         removeEmptyStringMembers(config)
-      }
-      // Add build environment if specified
-      if (buildEnvPath) {
-        config.buildEnv = getPropsFromFile(buildEnvPath)
-      }
-      config.unresolvedVariables = badVars
-      if (badVars && badVars.length > 0) {
-        const formatted = "'" + badVars.join("', '") + "'"
-        config.error =  new Error('The following substitutions could not be resolved: ' + formatted)
-      }
+      }      
       return config
     } catch (err) {
       const errMsgPrefix = `Invalid project configuration file (${configFile})`
