@@ -61,22 +61,25 @@ export interface ActionSpec {
     buildError?: Error // Error reported from the build step
 }
 
+export enum TriggerType {
+  SCHEDULED = 'SCHEDULED',
+}
 // Information about one trigger.  An action can have many triggers.  However, different actions may not
 // share the same trigger.
 export interface TriggerSpec {
     name: string // The name of the trigger.  Must be unique within the namespace.
-    sourceType: string // Currently, the one supported value "scheduler" is required.
-    sourceDetails: any // Currently, must conform to SchedulerSourceDetails
+    type: TriggerType  // Currently, the one supported value "scheduled" is required.
+    scheduledDetails?: ScheduledSourceDetails
     enabled?: boolean // Assumed true if omitted 
 }
 
-// The type used for the sourceDetails of a trigger whose sourceType is "scheduler"
-export interface SchedulerSourceDetails {
+// The type used for the sourceDetails of a trigger whose sourceType is "scheduled"
+export interface ScheduledSourceDetails {
     cron?: string      // must be a cron expression
     interval?: number  // in minutes (not yet implemented) 
     once?: string      // an ISO-format date (not yet implemented)
     // (cron, interval and once are mutually exclusive)
-    withBody?:  object // optional body to use when posting the function
+    body?:  object // optional body to use when posting the function
 }
 
 // Information of various kinds typically specified on the command line
