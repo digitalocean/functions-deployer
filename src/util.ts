@@ -486,7 +486,7 @@ function screenForbiddenAnnotations(annots: object): string {
 }
 
 // Validator for the 'triggers' clause of an action
-function validateTriggers(arg: TriggerSpec[]): string {
+export function validateTriggers(arg: TriggerSpec[]): string {
   if (!Array.isArray(arg)) {
     return `a 'triggers' clause must be an array`
   }
