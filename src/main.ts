@@ -298,7 +298,7 @@ export async function deployProject(project: string, cmdFlags: Flags, creds: Cre
   if (!todeploy) {
     return false
   } else if (todeploy.error && !cmdFlags.json) {
-    console.error(todeploy.error)
+    logger.displayError('', todeploy.error)
     return false
   }
   if (!watching && !todeploy.slice && !cmdFlags.json) {
