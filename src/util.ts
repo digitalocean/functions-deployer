@@ -486,7 +486,7 @@ function screenForbiddenAnnotations(annots: object): string {
 }
 
 // Validator for the 'triggers' clause of an action
-export function validateTriggers(arg: TriggerSpec[]): string {
+export function validateTriggers(arg: any): string {
   if (!Array.isArray(arg)) {
     return `a 'triggers' clause must be an array`
   }
@@ -533,7 +533,7 @@ export function validateTriggers(arg: TriggerSpec[]): string {
 }
 
 // Validator for the sourceDetails of a trigger when the sourceType is 'scheduled'
-function validateScheduledTriggerDetails(details: ScheduledSourceDetails): string | undefined {
+function validateScheduledTriggerDetails(details: any): string | undefined {
   if (!isDictionary(details)) {
     return 'the scheduledDetails field of a trigger specification must be a dictionary'
   }

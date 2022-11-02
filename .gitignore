@@ -3,3 +3,4 @@ node_modules
 *.tgz
 *.bak
 dosls
+.DS_Store
