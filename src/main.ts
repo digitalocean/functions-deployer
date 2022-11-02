@@ -65,7 +65,7 @@ export class DefaultLogger implements Logger {
     console.log(JSON.stringify(entity, null, 2))
   }
 
-  logTable(data: Record<string, unknown>[], columns: Record<string, unknown>, options: Record<string, unknown> = {}): void {
+  logTable(data: Record<string, unknown>[], _columns: Record<string, unknown>, _options: Record<string, unknown> = {}): void {
     console.log(JSON.stringify(data, null, 2))
   }
 
@@ -79,10 +79,7 @@ export class DefaultLogger implements Logger {
 
 // An alternative Logger for capturing output
 export class CaptureLogger implements Logger {
-  command: string[] // The oclif command sequence being captured (aio only)
   table: Record<string, unknown>[] // The output table (array of entity) if that kind of output was produced
-  tableColumns: Record<string, unknown> // The column definition needed to format the table with cli-ux
-  tableOptions: Record<string, unknown> // The options definition needed to format the table with cli-ux
   captured: string[] = [] // Captured line by line output (flowing via Logger.log)
   errors: string[] = [] // Captured calls to displayError (these are Errors that are not supposed to be thrown)
   entity: Record<string, unknown> // An output entity if that kind of output was produced
@@ -114,10 +111,8 @@ export class CaptureLogger implements Logger {
     this.entity = entity
   }
 
-  logTable(data: Record<string, unknown>[], columns: Record<string, unknown>, options: Record<string, unknown> = {}): void {
+  logTable(data: Record<string, unknown>[], _columns: Record<string, unknown>, _options: Record<string, unknown> = {}): void {
     this.table = data
-    this.tableColumns = columns
-    this.tableOptions = options
   }
 
   logOutput(json: Record<string, unknown>, msgs: string[]): void {
@@ -213,9 +208,7 @@ export async function runCommand(inputArgs: string[], logger: Logger) {
 async function doDeploy(project: string, flags: Flags, logger: Logger): Promise<void> {
     const { insecure, apiHost: apihost, auth } = flags
     const creds = await processCredentials(insecure, apihost, auth)
-    if (!await deployProject(project, flags, creds, false, logger)) {
-      process.exit(1)
-    }
+    await deployProject(project, flags, creds, false, logger)
 }
 
 // Command to retrieve project description metadata
@@ -362,7 +355,7 @@ function displayJSONResult(outcome: DeployResponse, logger: Logger, feedback: an
 }
 
 // Display the result of a successful run
-function displayResult(result: DeployResponse, watching: boolean, logger: Logger): boolean {
+function displayResult(result: DeployResponse, _watching: boolean, logger: Logger): boolean {
   let success = true
   if (result.successes.length === 0 && result.failures.length === 0) {
     logger.log('\nNothing deployed')
