@@ -21,6 +21,9 @@ import { getRuntimeForAction, renameActionsToFunctions } from './util'
 import { watch } from './watch'
 import * as path from 'path'
 import { default as parser } from 'yargs-parser'
+import { STATUS_CODES } from 'http'
+import createDebug from 'debug'
+const verboseError = createDebug('nim:error')
 
 // Provides a limited purpose main function for the deployer
 //main().then(flush).catch(handleError)
@@ -47,14 +50,15 @@ export class DefaultLogger implements Logger {
   
   handleError(msg: string, err?: Error): never {
     if (err) throw err
+    msg = improveErrorMsg(msg, err)
     throw new Error(msg)
   }
 
   displayError(msg: string, err?: Error): void {
-    if (!err) {
-       err = new Error(msg || 'unknown error')
-    }
-    console.error(err)
+    msg = improveErrorMsg(msg, err)
+    verboseError('%O', err)
+    const bang = process.platform === 'win32' ? '»' : '›'
+    console.log(bang  + '   Error: ' + msg)
   }
 
   exit(code: number): void {
@@ -93,14 +97,13 @@ export class CaptureLogger implements Logger {
 
   handleError(msg: string, err?: Error): never {
     if (err) throw err
+    msg = improveErrorMsg(msg, err)
     throw new Error(msg)
   }
 
   displayError(msg: string, err?: Error): void {
-    if (err && !msg) {
-       msg = err.message
-    }
-    this.errors.push(msg || 'unknown error')
+    msg = improveErrorMsg(msg, err)
+    this.errors.push(msg)
   }
 
   exit(_code: number): void {
@@ -414,4 +417,34 @@ function displayResult(result: DeployResponse, _watching: boolean, logger: Logge
     }
   }
   return success
+}
+
+// Improves an error message based on analyzing the accompanying Error object (adopted from the nim CLI)
+function improveErrorMsg(msg: string, err?: any): string {
+  const getStatusCode = (code: number) => `${code} ${STATUS_CODES[code] || ''}`.trim()
+
+  let pretty = ''
+  if (err) {
+    pretty = err.message || ''
+    if (err.name === 'OpenWhiskError') {
+      if (err.error && err.error.error) {
+        pretty = err.error.error.toLowerCase()
+        if (err.statusCode) pretty = `${pretty} (${getStatusCode(err.statusCode)})`
+        else if (err.error.code) pretty = `${pretty} (${err.error.code})`
+      } else if (err.statusCode) {
+        pretty = getStatusCode(err.statusCode)
+      }
+    }
+  }
+  if ((pretty || '').toString().trim()) {
+    msg = msg ? `${msg}: ${pretty}` : pretty
+  }
+  if (!msg) {
+    if (err.status) {
+      msg = getStatusCode(err.status)
+    } else {
+      msg = 'unknown error'
+    }
+  }
+  return msg
 }
