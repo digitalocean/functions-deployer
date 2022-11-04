@@ -228,16 +228,16 @@ export async function getRuntimeForAction(action: ActionSpec, reader: ProjectRea
 }
 
 // Check whether a list of names that are candidates for zipping can agree on a runtime.  This is called only when the
-// config doesn't already provide a runtime or on the raw material in the case of remote builds.
+// config doesn't already provide a runtime, or on the raw material in the case of remote builds.
 export async function agreeOnRuntime(items: string[]): Promise<string> {
   let agreedRuntime: string
-  items.forEach(async item => {
-    const { runtime } = await actionFileToParts(item)
-    if (runtime) {
-      if (agreedRuntime && runtime !== agreedRuntime) {
+  const partsArray = await Promise.all(items.map(item => actionFileToParts(item)))
+  partsArray.forEach(answer => {
+    if (answer.runtime) {
+      if (agreedRuntime && answer.runtime !== agreedRuntime) {
         return undefined
       }
-      agreedRuntime = runtime
+      agreedRuntime = answer.runtime
     }
   })
   return agreedRuntime
