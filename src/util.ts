@@ -52,6 +52,7 @@ export const SYSTEM_EXCLUDE_PATTERNS = ['.gitignore', '.DS_Store', '**/.git/**',
 // Read the project config file, with validation
 export async function loadProjectConfig(configFile: string, envPath: string, buildEnvPath: string, filePath: string, reader: ProjectReader,
   feedback: Feedback): Promise<DeployStructure> {
+  const learnMore = "   Learn more about the project configuration file https://docs.digitalocean.com/products/functions/reference/project-configuration/"
   return reader.readFileContents(configFile).then(async data => {
     try {
       // Read the config, substituting from env
@@ -96,6 +97,8 @@ export async function loadProjectConfig(configFile: string, envPath: string, bui
       } else {
         err.message = `${errMsgPrefix}`
       }
+
+      err.message = `${err.message} \n ${learnMore}`
       return errorStructure(err)
     }
   })
@@ -456,7 +459,8 @@ async function validateActionSpec(arg: Record<string, any>, isNimbella: boolean)
         break
       }
       case 'triggers': {
-        const trigErr = validateTriggers(arg[item])
+        let triggerArs = transformLegacyTriggers(arg[item])
+        const trigErr = validateTriggers(triggerArs)
         if (trigErr) {
           return trigErr
         }
@@ -483,6 +487,35 @@ function screenForbiddenAnnotations(annots: object): string {
     }
   }
   return ''
+}
+
+// Transforms legacy triggers format to new format for backwards compatibility. 
+// Should be removed after the triggers beta is over and throw error to users.
+// 
+// sourceType             -> type ("scheduler" -> "scheduled")
+// sourceDetails          -> scheduledDetails
+// sourceDetails.withBody -> scheduledDetails.body
+function transformLegacyTriggers(args: any) {
+  let transformedArgs = args
+  if(!Array.isArray(transformedArgs)) {
+    return args
+  }
+
+  transformedArgs.forEach((trigger, index) => {
+    if (!trigger.sourceType && !trigger.sourceDetails) {
+      return;
+    }
+    transformedArgs[index].scheduledDetails = {
+      cron: trigger.sourceDetails?.cron,
+      body: trigger.sourceDetails?.withBody
+    }
+    transformedArgs[index].type = trigger.sourceType === "scheduler" ? "SCHEDULED" : trigger.sourceType
+
+    delete transformedArgs[index].sourceType;
+    delete transformedArgs[index].sourceDetails;
+  })
+
+  return transformedArgs;
 }
 
 // Validator for the 'triggers' clause of an action

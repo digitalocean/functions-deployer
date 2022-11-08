@@ -88,7 +88,7 @@ async function doTriggerCreate(trigger: string, fcn: string, namespace: string, 
     await doTriggerDelete(trigger, namespace)
   } catch {}
   const config: AxiosRequestConfig = {
-    url: doAPIEndpoint + '/v2/functions/namespaces/' + namespace + '/trigger',
+    url: `${doAPIEndpoint}/v2/functions/namespaces/${namespace}/triggers`,
     method: 'post',
     data: {
       name: trigger,
@@ -129,7 +129,7 @@ async function undeployTrigger(trigger: string, namespace: string) {
 // Delete a trigger using the real API
 async function doTriggerDelete(trigger: string, namespace: string): Promise<object> {
   const config: AxiosRequestConfig = {
-    url: doAPIEndpoint + `/v2/functions/namespaces/${namespace}/trigger/${trigger}`,
+    url: `${doAPIEndpoint}/v2/functions/namespaces/${namespace}/triggers/${trigger}`,
     method: 'delete'
   }
   return doAxios(config)
@@ -158,7 +158,7 @@ interface TriggerInfo {
 // provided by the API so it is done here.
 async function doTriggerList(namespace: string, fcn: string): Promise<string[]> {
   const config: AxiosRequestConfig = {
-    url: doAPIEndpoint + `/v2/functions/namespaces/${namespace}/triggers`,
+    url: `${doAPIEndpoint}/v2/functions/namespaces/${namespace}/triggers`,
     method: 'get'
   }
   let triggers: TriggerList
