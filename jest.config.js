@@ -5,10 +5,10 @@ module.exports = {
       {
         tsconfig: 'tsconfig.json',
         diagnostics: false
-      },
-    ],
+      }
+    ]
   },
 
   preset: 'ts-jest',
-  testEnvironment: 'node',
-}; 
+  testEnvironment: 'node'
+};
