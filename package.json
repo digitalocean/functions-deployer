@@ -1,6 +1,6 @@
 {
   "name": "@digitalocean/functions-deployer",
-  "version": "5.0.12",
+  "version": "5.0.13",
   "description": "The the functions deployer for DigitalOcean",
   "main": "lib/index.js",
   "repository": {
@@ -37,6 +37,9 @@
     "touch": "^3.1.0",
     "xmlhttprequest": "^1.8.0",
     "yargs-parser": "^21.1.1"
+  },
+  "overrides": {
+    "needle": "3.1.0"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.4.33",

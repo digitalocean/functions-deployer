@@ -1379,6 +1379,8 @@ export function delay(millis: number): Promise<void> {
 // If the wait "times out", undefined is returned.
 export async function waitForActivation(id: string, wsk: Client, waiting: () => void, total: number): Promise<Activation<Dict>> {
   debug(`waiting for activation with id ${id}`)
+  let errors = 0
+  const maxErrors = 3
   for (let i = 1 ;i <= total; i++) {
     try {
       const activation = await wsk.activations.get(id)
@@ -1388,6 +1390,9 @@ export async function waitForActivation(id: string, wsk: Client, waiting: () => 
       }
     } catch (err) {
       if (err.statusCode !== 404) {
+        errors++
+      }
+      if (errors > maxErrors) {
         throw err
       }
     }
