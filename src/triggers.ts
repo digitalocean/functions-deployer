@@ -21,7 +21,7 @@
 // via nim rather than doctl, the invoking context must set this key (e.g. in the app platform build container
 // or for testing).
 
-import { TriggerSpec, SchedulerSourceDetails, DeploySuccess } from './deploy-struct'
+import { TriggerSpec, DeploySuccess } from './deploy-struct'
 import { default as axios, AxiosRequestConfig } from 'axios'
 import makeDebug from 'debug'
 const debug = makeDebug('nim:deployer:triggers')
@@ -59,13 +59,13 @@ export async function undeployTriggers(triggers: string[], namespace: string): P
 // Note that basic structural validation of each trigger has been done previously
 // so paranoid checking is omitted.
 async function deployTrigger(trigger: TriggerSpec, functionName: string, namespace: string): Promise<DeploySuccess|Error> {
-  const details = trigger.sourceDetails as SchedulerSourceDetails
-  const { cron, withBody } = details
+  const details = trigger.scheduledDetails
+  const { cron, body } = details
   const { enabled } = trigger
   try {
     if (doAPIKey) {
         debug('calling the trigger API to create %s', trigger.name)
-        return await doTriggerCreate(trigger.name, functionName, namespace, cron, enabled, withBody)
+        return await doTriggerCreate(trigger.name, functionName, namespace, cron, enabled, body)
     } // otherwise do nothing
   } catch (err) {
     debug('caught an error while deploying trigger; will return it')
@@ -88,16 +88,17 @@ async function doTriggerCreate(trigger: string, fcn: string, namespace: string, 
     await doTriggerDelete(trigger, namespace)
   } catch {}
   const config: AxiosRequestConfig = {
-    url: doAPIEndpoint + '/v2/functions/trigger',
+    url: `${doAPIEndpoint}/v2/functions/namespaces/${namespace}/triggers`,
     method: 'post',
     data: {
       name: trigger,
-      namespace,
       function: fcn,
       is_enabled: enabled !== false, // ie, defaults to true
-      trigger_source: 'SCHEDULED',
-      cron,
-      body: withBody
+      type: 'SCHEDULED',
+      scheduled_details: {
+        cron,
+        body: withBody
+      }
     }
   }
   debug('trigger create request config is: %O', config)
@@ -128,7 +129,7 @@ async function undeployTrigger(trigger: string, namespace: string) {
 // Delete a trigger using the real API
 async function doTriggerDelete(trigger: string, namespace: string): Promise<object> {
   const config: AxiosRequestConfig = {
-    url: doAPIEndpoint + `/v2/functions/trigger/${namespace}/${trigger}`,
+    url: `${doAPIEndpoint}/v2/functions/namespaces/${namespace}/triggers/${trigger}`,
     method: 'delete'
   }
   return doAxios(config)
@@ -157,7 +158,7 @@ interface TriggerInfo {
 // provided by the API so it is done here.
 async function doTriggerList(namespace: string, fcn: string): Promise<string[]> {
   const config: AxiosRequestConfig = {
-    url: doAPIEndpoint + `/v2/functions/triggers/${namespace}`,
+    url: `${doAPIEndpoint}/v2/functions/namespaces/${namespace}/triggers`,
     method: 'get'
   }
   let triggers: TriggerList

@@ -13,7 +13,7 @@
 
 import {
   DeployStructure, DeployResponse, DeploySuccess, DeployKind, ActionSpec, PackageSpec, Feedback,
-  DeployerAnnotation, VersionMap, VersionEntry, PathKind, ProjectReader, KeyVal
+  DeployerAnnotation, VersionMap, VersionEntry, PathKind, ProjectReader, KeyVal, ScheduledSourceDetails, TriggerSpec, TriggerType
 } from './deploy-struct'
 import { getUserAgent } from './api'
 import { XMLHttpRequest } from 'xmlhttprequest'
@@ -52,6 +52,7 @@ export const SYSTEM_EXCLUDE_PATTERNS = ['.gitignore', '.DS_Store', '**/.git/**',
 // Read the project config file, with validation
 export async function loadProjectConfig(configFile: string, envPath: string, buildEnvPath: string, filePath: string, reader: ProjectReader,
   feedback: Feedback): Promise<DeployStructure> {
+  const learnMore = "   Learn more about the project configuration file https://docs.digitalocean.com/products/functions/reference/project-configuration/"
   return reader.readFileContents(configFile).then(async data => {
     try {
       // Read the config, substituting from env
@@ -96,6 +97,8 @@ export async function loadProjectConfig(configFile: string, envPath: string, bui
       } else {
         err.message = `${errMsgPrefix}`
       }
+
+      err.message = `${err.message} \n ${learnMore}`
       return errorStructure(err)
     }
   })
@@ -456,7 +459,8 @@ async function validateActionSpec(arg: Record<string, any>, isNimbella: boolean)
         break
       }
       case 'triggers': {
-        const trigErr = validateTriggers(arg[item])
+        let triggerArs = transformLegacyTriggers(arg[item])
+        const trigErr = validateTriggers(triggerArs)
         if (trigErr) {
           return trigErr
         }
@@ -485,102 +489,111 @@ function screenForbiddenAnnotations(annots: object): string {
   return ''
 }
 
+// Transforms legacy triggers format to new format for backwards compatibility. 
+// Should be removed after the triggers beta is over and throw error to users.
+// 
+// sourceType             -> type ("scheduler" -> "scheduled")
+// sourceDetails          -> scheduledDetails
+// sourceDetails.withBody -> scheduledDetails.body
+function transformLegacyTriggers(args: any) {
+  let transformedArgs = args
+  if(!Array.isArray(transformedArgs)) {
+    return args
+  }
+
+  transformedArgs.forEach((trigger, index) => {
+    if (!trigger.sourceType && !trigger.sourceDetails) {
+      return;
+    }
+    transformedArgs[index].scheduledDetails = {
+      cron: trigger.sourceDetails?.cron,
+      body: trigger.sourceDetails?.withBody
+    }
+    transformedArgs[index].type = trigger.sourceType === "scheduler" ? "SCHEDULED" : trigger.sourceType
+
+    delete transformedArgs[index].sourceType;
+    delete transformedArgs[index].sourceDetails;
+  })
+
+  return transformedArgs;
+}
+
 // Validator for the 'triggers' clause of an action
-function validateTriggers(arg: any): string {
+export function validateTriggers(arg: any): string {
   if (!Array.isArray(arg)) {
     return `a 'triggers' clause must be an array`
   }
-  for (const trigger of arg) {
+
+  for (const trigger of arg as TriggerSpec[]) {
     if (!isDictionary(trigger)) {
       return 'an individual trigger must be a dictionary'
     }
-    let name = false, sourceType = false, sourceDetails = false
-    for (const item in trigger) {
-      const value = trigger[item]
-        switch(item) {
-          case 'name':
-            if (typeof value !== 'string') {
-              return `a trigger name must be a string but the provided type is'${typeof value}'`
-            }
-            name = true
-            break          
-          case 'sourceType':
-            if (value !== 'scheduler') {
-              return `only triggers with sourcetype 'scheduler' are supported at this time`
-            }
-            sourceType = true
-            break
-          case 'sourceDetails': {
-            // TODO more dispatching will be needed here when more sourceTypes are supported
-            const schedErr = validateSchedulerSourceDetails(value)
-            if (schedErr) {
-              return schedErr
-            }
-            sourceDetails = true
-            break
-          }
-          case 'overwrite':
-          case 'enabled':
-            if (typeof value !== 'boolean') {
-              return `the '${item}' property of a trigger must be boolean'`
-            }
-            break
-          default:
-            return `Invalid key '${item}' found in 'triggers' clause in project.yml`
-        }
-     }
-     if (!name) {
-       return `the 'name' field of a trigger is required`   
-     }
-     if (!sourceType) {
-       return `the 'sourceType' field of a trigger required`   
-     }
-     if (!sourceDetails) {
-       return `the 'sourceDetails' property of a trigger is required`   
+
+    for (const item of Object.keys(trigger)) {
+      if (!['name', 'enabled', 'type', 'scheduledDetails'].includes(item)) {
+        return `Invalid key '${item}' found in 'triggers' clause in project.yml`
+      }
+    }
+    
+    const name = trigger.name
+    const type = typeof trigger.type === 'string' ? trigger.type.toUpperCase() : trigger.type
+    const scheduledDetails = trigger.scheduledDetails
+    
+    if (typeof name !== 'string') {
+      return `the 'name' field of a trigger is required`   
+    }
+
+    if (![TriggerType.SCHEDULED].includes(type as TriggerType)) {
+      return `the trigger 'type' field must be '${Object.values(TriggerType).join(' | ')}'`   
+    } 
+
+    if (type === TriggerType.SCHEDULED) {
+      if (!isDictionary(scheduledDetails)) {
+        return `the 'scheduledDetails' property of a trigger is required for type="${TriggerType.SCHEDULED}"`   
+      }
+
+      const err = validateScheduledTriggerDetails(scheduledDetails)
+      if (err) {
+        return err
+      }
+    }
+    
+    if (trigger.enabled && typeof trigger.enabled !== 'boolean') {
+      return `the 'enabled' property of a trigger must be boolean'`
     }
   }
   return undefined
 }
 
-// Validator for the sourceDetails of a trigger when the sourceType is 'scheduler'
-function validateSchedulerSourceDetails(arg: any): string {
-  if (!isDictionary(arg)) {
-    return 'the sourceDetails field of a trigger specification must be a dictionary'
+// Validator for the sourceDetails of a trigger when the sourceType is 'scheduled'
+function validateScheduledTriggerDetails(details: any): string | undefined {
+  if (!isDictionary(details)) {
+    return 'the scheduledDetails field of a trigger specification must be a dictionary'
   }
-  let timeFound = false
-  for (const item in arg) {
-    const value = arg[item]
-    switch (item) {
-      case 'cron':
-        timeFound = true
-        if (typeof value !== 'string') {
-          return `the 'cron' member of scheduler 'sourceDetails' must be a string`
-        }
-        if (!isValidCron(value)) {
-          // Note we are now validating with no "special options" enabled, so this is
-          // least-common-denominator crontab (no seconds, no aliases, etc.).  We should make sure
-          // we are at least considering valid anything that the scheduler will actually accept.
-          return `the cron expression '${value}' is not valid crontab syntax`
-        }
-        break
-      case 'interval':
-      case 'once':
-        // TODO validate properly once implemented.  Eventually check that only one
-        // of cron, interval or once is specified.
-        return `the ${item} member of scheduler sourceDetails is defined but not yet implemented`
-      case 'withBody':
-        if (!isDictionary(value)) {
-          return `the 'withBody' member of scheduler sourceDetails must be a dictionary`
-        }
-        break
-      default:
-        return `Invalid key '${item}' found in scheduler 'sourceDetails' in project.yml`
+
+  for (const item of Object.keys(details)) {
+    if (!['cron', 'body'].includes(item)) {
+      return `Invalid key '${item}' found in scheduledDetails in project.yml`
     }
   }
-  if (!timeFound) {
-    return `no trigger time was specified for a trigger with sourcetype 'scheduler'`
-  }  
-  return undefined
+
+  const cron = details.cron;
+  const body = details.body;
+
+  if (typeof cron !== 'string') {
+    return `the 'cron' member of 'scheduledDetails' must be a string`
+  }
+
+  if (!isValidCron(cron)) {
+    // Note we are now validating with no "special options" enabled, so this is
+    // least-common-denominator crontab (no seconds, no aliases, etc.).  We should make sure
+    // we are at least considering valid anything that the scheduler will actually accept.
+    return `the cron expression '${cron}' is not valid crontab syntax`
+  }
+
+  if (body && !isDictionary(body)) {
+    return `the 'body' member of scheduledDetails must be a dictionary`
+  }
 }
 
 // Validator for the 'environment' clause of package or action.  Checks that all values are strings

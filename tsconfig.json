@@ -10,10 +10,16 @@
     "sourceMap": true,
     "baseUrl": ".",
     "esModuleInterop": true,
+    "skipLibCheck": true,
     "paths": {
       "@nimbella/storage/*": ["src/*"]
     }
   },
+  "exclude": [
+    "src/**/*.spec.ts",
+    "src/**/*.test.ts",
+    "node_modules",
+  ],
   "include": [
     "src/**/*"
   ]
