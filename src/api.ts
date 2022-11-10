@@ -352,17 +352,16 @@ export function getMessageFromError(err: any): string {
 }
 
 // Wipe a namespace of everything except its activations (the activations cannot be wiped via the public API)
-export async function wipeNamespace(
-  host: string,
-  auth: string,
-  credentials: Credentials
-): Promise<void> {
+export async function wipeNamespace(credentials: Credentials): Promise<void> {
   debug(
     'Requested wipe-namespace function with host %s and auth %s',
-    host,
-    auth
+    credentials.ow.apihost,
+    credentials.ow.api_key
   );
-  const init: OWOptions = { apihost: host, api_key: auth };
+  const init: OWOptions = {
+    apihost: credentials.ow.apihost,
+    api_key: credentials.ow.api_key
+  };
   const client = openwhisk(init);
   debug('Client opened');
   return wipe(client, credentials);
