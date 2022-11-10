@@ -14,22 +14,81 @@
 // Gather together the major deployer exports for convenient import in other packages
 
 export {
-  initializeAPI, deployProject, readPrepareAndBuild, readAndPrepare, deploy, readProject, buildProject, prepareToDeploy,
-  wipeNamespace, wipePackage, getUserAgent
-} from './api'
+  initializeAPI,
+  deployProject,
+  readPrepareAndBuild,
+  readAndPrepare,
+  deploy,
+  readProject,
+  buildProject,
+  prepareToDeploy,
+  wipeNamespace,
+  wipePackage,
+  getUserAgent
+} from './api';
 export {
-  DeployStructure, DeployResponse, DeploySuccess, OWOptions, Credentials, CredentialRow, Flags, PackageSpec, ActionSpec,
-  CredentialHostMap, CredentialNSMap, DeployerAnnotation, VersionMap, Feedback, DefaultFeedback, FullCredentials, IdProvider
-} from './deploy-struct'
+  DeployStructure,
+  DeployResponse,
+  DeploySuccess,
+  OWOptions,
+  Credentials,
+  CredentialRow,
+  Flags,
+  PackageSpec,
+  ActionSpec,
+  CredentialHostMap,
+  CredentialNSMap,
+  DeployerAnnotation,
+  VersionMap,
+  Feedback,
+  DefaultFeedback,
+  FullCredentials,
+  IdProvider
+} from './deploy-struct';
 export {
-  addCredentialAndSave, getCredentials, getCredentialList, getCredentialDict, getCredentialsForNamespace, forgetNamespace, switchNamespace, getCurrentNamespace,
-  getApiHosts, Persister, authPersister, addGithubAccount, getGithubAccounts, deleteGithubAccount, getGithubAuth, getCredentialsFromEnvironment,
-  switchGithubAccount, nimbellaDir,
-} from './credentials'
-export { wskRequest, delay, writeSliceResult, getBestProjectName, renamePackage, getExclusionList, isExcluded, 
-  SYSTEM_EXCLUDE_PATTERNS, getRuntimeForAction, emptyStructure, invokeWebSecure, renameActionsToFunctions, deleteAction } from './util'
-export * from './runtimes'
-export { GithubDef, isGithubRef, parseGithubRef, fetchProject } from './github'
-export { deleteSlice } from './slice-reader'
-export { makeIncluder } from './includer'
-export { DefaultLogger, CaptureLogger, runCommand, main, flush, handleError } from './main'
+  addCredentialAndSave,
+  getCredentials,
+  getCredentialList,
+  getCredentialDict,
+  getCredentialsForNamespace,
+  forgetNamespace,
+  switchNamespace,
+  getCurrentNamespace,
+  getApiHosts,
+  Persister,
+  authPersister,
+  addGithubAccount,
+  getGithubAccounts,
+  deleteGithubAccount,
+  getGithubAuth,
+  getCredentialsFromEnvironment,
+  switchGithubAccount,
+  nimbellaDir
+} from './credentials';
+export {
+  wskRequest,
+  delay,
+  writeSliceResult,
+  getBestProjectName,
+  renamePackage,
+  getExclusionList,
+  isExcluded,
+  SYSTEM_EXCLUDE_PATTERNS,
+  getRuntimeForAction,
+  emptyStructure,
+  invokeWebSecure,
+  renameActionsToFunctions,
+  deleteAction
+} from './util';
+export * from './runtimes';
+export { GithubDef, isGithubRef, parseGithubRef, fetchProject } from './github';
+export { deleteSlice } from './slice-reader';
+export { makeIncluder } from './includer';
+export {
+  DefaultLogger,
+  CaptureLogger,
+  runCommand,
+  main,
+  flush,
+  handleError
+} from './main';
