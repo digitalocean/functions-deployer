@@ -1,0 +1,20 @@
+packages:
+  - name: test-triggers
+    functions:
+      - name: hello1
+        web: false
+        triggers:
+          - name: invoke1
+            type: "SCHEDULED"
+            scheduledDetails:
+              cron: "* * * * *"
+              body:
+                name: "tester"
+      - name: hello2
+        web: false
+        triggers:
+          - name: invoke2
+            sourceType: scheduler
+            enabled: false
+            sourceDetails:
+              cron: "30 * * * *"

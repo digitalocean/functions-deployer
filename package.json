@@ -54,6 +54,9 @@
     "@types/yargs-parser": "^21.0.0",
     "@typescript-eslint/eslint-plugin": "^5.42.1",
     "@typescript-eslint/parser": "^5.42.1",
+    "bats": "1.5.0",
+    "bats-assert": "https://github.com/bats-core/bats-assert.git",
+    "bats-support": "https://github.com/bats-core/bats-support.git",
     "esbuild": "^0.14.36",
     "eslint": "^8.27.0",
     "esbuild-node-externals": "^1.4.1",
@@ -78,6 +81,7 @@
   "scripts": {
     "prepack": "npm run build",
     "test": "jest",
+    "test:e2e": "cd ./e2e && bats -rT .",
     "build": "tsc && node esbuild.config.js",
     "lint": "eslint --ext js,ts src",
     "format": "prettier --write \"./**/*.{js,ts,json}\""
