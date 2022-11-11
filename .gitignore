@@ -7,3 +7,4 @@ dosls
 bin/doctl
 
 e2e/*/.deployed
+*.env.test

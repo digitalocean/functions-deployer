@@ -15,7 +15,10 @@ elif [ -z "$TEST_NAMESPACE" ]; then
   echo "Missing TEST_NAMESPACE"
 fi
 
-DOSLS=../bin/run
+if [ -z "$DOSLS" ]; then
+  DOSLS=../bin/run
+fi
+
 if [ -z "$DOCTL" ]; then
   DOCTL=../bin/doctl
 fi
@@ -27,4 +30,7 @@ delete_package() {
 init_namespace() {
   $DOCTL auth init $DO_API_KEY
   $DOCTL sls connect $TEST_NAMESPACE
+
+  ## Ideal way to auth the deployer
+  # export NIMBELLA_DIR=bash -c "$DOCTL sls status --credentials | jq -r '.path'"
 }
