@@ -1,5 +1,5 @@
-load ../node_modules/bats-support/load.bash
-load ../node_modules/bats-assert/load.bash
+load ../../node_modules/bats-support/load.bash
+load ../../node_modules/bats-assert/load.bash
 
 ## loads values from .env.test file and validates that required
 ## envs have been provided
@@ -29,6 +29,7 @@ delete_package() {
 
 init_namespace() {
   $DOCTL auth init $DO_API_KEY
+  $DOCTL sls install
   $DOCTL sls connect $TEST_NAMESPACE
 
   ## Ideal way to auth the deployer

@@ -1,4 +1,4 @@
-load ./test_helper.bash
+load ../test_helper.bash
 
 setup_file() {
   init_namespace
