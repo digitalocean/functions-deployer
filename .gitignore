@@ -6,6 +6,6 @@ dosls
 .DS_Store
 bin/doctl
 
-e2e/*/.deployed
+.deployed
 *.env.test
 coverage/
