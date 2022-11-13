@@ -1,0 +1,15 @@
+name: Pull Request
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    uses: "./_build.yml"
+  # lint:
+  #   uses: digitalocean/ui-actions/.github/workflows/lint.yml@main
+  # unit-tests:
+  #   uses: digitalocean/ui-actions/.github/workflows/unit-tests.yml@main
+  # types:
+  #   uses: digitalocean/ui-actions/.github/workflows/types.yml@main
+  # prettier:
+  #   uses: digitalocean/ui-actions/.github/workflows/prettier.yml@main
