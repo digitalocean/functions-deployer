@@ -5,8 +5,8 @@ on: [push, pull_request]
 jobs:
   build:
     uses: ./.github/workflows/_build.yml
-  # lint:
-  #   uses: digitalocean/ui-actions/.github/workflows/lint.yml@main
+  lint:
+    uses: ./.github/workflows/_lint.yml
   # unit-tests:
   #   uses: digitalocean/ui-actions/.github/workflows/unit-tests.yml@main
   # types:
