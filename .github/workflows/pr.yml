@@ -4,7 +4,7 @@ on: [push, pull_request]
 
 jobs:
   build:
-    uses: ./.github/workflows/_build.yaml
+    uses: ./.github/workflows/_build.yml
   # lint:
   #   uses: digitalocean/ui-actions/.github/workflows/lint.yml@main
   # unit-tests:
