@@ -208,6 +208,7 @@ export async function cleanPackage(
   versions: VersionEntry
 ): Promise<openwhisk.Package> {
   debug('Cleaning package %s', name);
+  // eslint-disable-next-line no-constant-condition
   while (true) {
     const pkg = await client.packages.get({ name }).catch(() => undefined);
     if (!pkg) {
