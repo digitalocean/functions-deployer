@@ -1,0 +1,8 @@
+cleanNamespace: false
+packages:
+  - name: test-multi-line
+    actions:
+      - name: hello
+        runtime: 'nodejs:default'
+        environment:
+          MULTI: ${MULTI}

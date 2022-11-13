@@ -1,0 +1,10 @@
+packages:
+  - name: test-remote-build-go
+    actions:
+      - name: explicit
+        file: packages/test-remote-build-go/default.go
+        runtime: 'go:1.15'
+#      - name: dependencies-1.15
+#        runtime: 'go:1.15'
+      - name: dependencies-1.17
+        runtime: 'go:1.17'

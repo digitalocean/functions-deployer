@@ -1,0 +1,9 @@
+packages:
+  - name: test-use-lib
+    actions:
+      - name: hello1
+        runtime: 'nodejs:default'
+      - name: hello2
+        runtime: 'nodejs:default'
+      - name: hello3
+        runtime: 'nodejs:default'

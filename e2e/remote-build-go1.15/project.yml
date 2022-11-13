@@ -1,0 +1,5 @@
+packages:
+  - name: test-remote-build-go
+    actions:
+      - name: dependencies-1.15
+        runtime: 'go:1.15'
