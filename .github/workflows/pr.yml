@@ -7,9 +7,5 @@ jobs:
     uses: ./.github/workflows/_build.yml
   lint:
     uses: ./.github/workflows/_lint.yml
-  # unit-tests:
-  #   uses: digitalocean/ui-actions/.github/workflows/unit-tests.yml@main
-  # types:
-  #   uses: digitalocean/ui-actions/.github/workflows/types.yml@main
-  # prettier:
-  #   uses: digitalocean/ui-actions/.github/workflows/prettier.yml@main
+  unit-tests:
+    uses: ./.github/workflows/_unit-test.yml

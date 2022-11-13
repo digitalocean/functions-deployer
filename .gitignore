@@ -8,3 +8,4 @@ bin/doctl
 
 e2e/*/.deployed
 *.env.test
+coverage/
