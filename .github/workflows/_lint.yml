@@ -20,5 +20,5 @@ jobs:
         run: npm ci
       - name: Run linter
         run: npm run lint
-      - name: Run formatter
-        run: yarn format
+      - name: Run prettier
+        run: npm run format:check
