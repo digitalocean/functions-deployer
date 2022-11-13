@@ -13,9 +13,7 @@
 
 // Contains the main public (library) API of the deployer (some exports in 'util' may also be used externally but are incidental)
 
-import { 
-  
-  cleanOrLoadVersions, doDeploy, cleanPackage } from './deploy';
+import { cleanOrLoadVersions, doDeploy, cleanPackage } from './deploy';
 import {
   DeployStructure,
   DeployResponse,
