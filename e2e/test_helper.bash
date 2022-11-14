@@ -35,3 +35,14 @@ init_namespace() {
   ## Ideal way to auth the deployer
   # export NIMBELLA_DIR=bash -c "$DOCTL sls status --credentials | jq -r '.path'"
 }
+
+test_binary_action() {
+	run $DOCTL sls fn invoke $1 -f
+	assert_success
+	assert_output --partial '"status": "success"'
+	assert_output --partial $2
+
+	run $DOCTL sls fn get $1
+	assert_success
+	assert_output --partial '"binary": true'
+}

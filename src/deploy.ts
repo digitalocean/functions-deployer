@@ -88,7 +88,7 @@ export async function doDeploy(
   const skipPkgDeploy =
     todeploy.slice && todeploy.deployerAnnotation.newSliceHandling;
   delete todeploy.deployerAnnotation.newSliceHandling;
-  const actionPromises = todeploy.packages.map((pkg) =>
+  const actionPromises = (todeploy.packages || []).map((pkg) =>
     deployPackage(pkg, todeploy, skipPkgDeploy)
   );
   const responses: DeployResponse[] = await Promise.all(actionPromises);
@@ -575,7 +575,7 @@ async function deploySequences(
     return [wrapError(err, 'sequences')];
   }
   const result: DeployResponse[] = [];
-  for (const seq of todeploy.sequences) {
+  for (const seq of todeploy.sequences ?? []) {
     const components = seq.sequence.map((action) =>
       fqn(action, todeploy.credentials.namespace)
     );
@@ -618,7 +618,7 @@ function getAllActionFqns(
   namespace: string
 ): Set<string> {
   const ans = new Set<string>();
-  for (const pkg of spec.packages) {
+  for (const pkg of (spec.packages ?? [])) {
     if (pkg.actions) {
       pkg.actions.forEach((action) =>
         ans.add(fqnFromActionSpec(action, namespace))
