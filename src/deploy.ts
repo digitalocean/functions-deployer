@@ -618,7 +618,7 @@ function getAllActionFqns(
   namespace: string
 ): Set<string> {
   const ans = new Set<string>();
-  for (const pkg of (spec.packages ?? [])) {
+  for (const pkg of spec.packages ?? []) {
     if (pkg.actions) {
       pkg.actions.forEach((action) =>
         ans.add(fqnFromActionSpec(action, namespace))
