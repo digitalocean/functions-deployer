@@ -26,7 +26,8 @@ import {
   ProjectReader,
   KeyVal,
   TriggerSpec,
-  TriggerType
+  TriggerType,
+  Credentials
 } from './deploy-struct';
 import { getUserAgent } from './api';
 import { XMLHttpRequest } from 'xmlhttprequest';
@@ -1261,11 +1262,14 @@ function deployerAnnotationFromGithub(githubPath: string): DeployerAnnotation {
 // This is not guaranteed to succeed but it will attempt to wipe as much as possible,
 // returning all errors that occurred.  If an error occurs when removing a trigger that
 // is associated with a function, the function is not deleted.
-export async function wipe(client: Client): Promise<void> {
+export async function wipe(
+  client: Client,
+  credentials: Credentials
+): Promise<void> {
   const errors: any[] = [];
   // Delete the actions, which will delete associated triggers if possible.  If a trigger
   // cannot be deleted, the action is left also.
-  await wipeActions(client, errors);
+  await wipeActions(client, credentials, errors);
   debug('Actions wiped');
   // Delete the packages.  Note that if an action deletion failed, the containing
   // package will likely fail also.
@@ -1276,8 +1280,8 @@ export async function wipe(client: Client): Promise<void> {
   // On the other hand, if one or more triggers failed deletion before, they
   // may fail again here, with duplicate errors.  We are tolerating that for the moment.
   const namespace = await getTargetNamespace(client);
-  const triggers = await listTriggersForNamespace(namespace, '');
-  const errs = await undeployTriggers(triggers, namespace);
+  const triggers = await listTriggersForNamespace(namespace, credentials, '');
+  const errs = await undeployTriggers(triggers, credentials);
   if (errs.length > 0) {
     errors.push(...errs);
   }
@@ -1331,7 +1335,11 @@ async function wipeAll(handle: any, kind: string, errors: any[]) {
 // Note that the list function can only return 200 actions at a time.  This is done
 // differently from the other entity types because actions can have associated triggers
 // which should be deleted first (with the action remaining if the trigger deletion fails).
-async function wipeActions(client: Client, errors: any[]) {
+async function wipeActions(
+  client: Client,
+  credentials: Credentials,
+  errors: any[]
+) {
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const actions = await client.actions.list({ limit: 200 });
@@ -1344,7 +1352,7 @@ async function wipeActions(client: Client, errors: any[]) {
       if (nsparts.length > 1) {
         name = nsparts[1] + '/' + name;
       }
-      const result = await deleteAction(name, client);
+      const result = await deleteAction(name, client, credentials);
       if (Array.isArray(result)) {
         errors.push(...result);
         debug('error deleting the triggers');
@@ -1361,12 +1369,17 @@ async function wipeActions(client: Client, errors: any[]) {
 // error deleting the action).
 export async function deleteAction(
   actionName: string,
-  owClient: Client
+  owClient: Client,
+  credentials: Credentials
 ): Promise<Action | Error[]> {
   // Delete triggers.
   const namespace = await getTargetNamespace(owClient);
-  const triggers = await listTriggersForNamespace(namespace, actionName);
-  const errs = await undeployTriggers(triggers, namespace);
+  const triggers = await listTriggersForNamespace(
+    namespace,
+    credentials,
+    actionName
+  );
+  const errs = await undeployTriggers(triggers, credentials);
   if (errs.length > 0) {
     return errs;
   }

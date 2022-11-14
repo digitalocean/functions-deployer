@@ -21,11 +21,10 @@
 // via nim rather than doctl, the invoking context must set this key (e.g. in the app platform build container
 // or for testing).
 
-import { TriggerSpec, DeploySuccess } from './deploy-struct';
+import { TriggerSpec, DeploySuccess, Credentials } from './deploy-struct';
 import { default as axios, AxiosRequestConfig } from 'axios';
 import makeDebug from 'debug';
 const debug = makeDebug('nim:deployer:triggers');
-const doAPIKey = process.env.DO_API_KEY;
 const doAPIEndpoint = 'https://api.digitalocean.com';
 
 // Returns an array.  Elements are a either DeploySuccess structure for use in reporting when the trigger
@@ -34,11 +33,11 @@ const doAPIEndpoint = 'https://api.digitalocean.com';
 export async function deployTriggers(
   triggers: TriggerSpec[],
   functionName: string,
-  namespace: string
+  credentials: Credentials
 ): Promise<(DeploySuccess | Error)[]> {
   const result: (DeploySuccess | Error)[] = [];
   for (const trigger of triggers) {
-    result.push(await deployTrigger(trigger, functionName, namespace));
+    result.push(await deployTrigger(trigger, functionName, credentials));
   }
   debug('finished deploying triggers, returning result');
   return result;
@@ -48,12 +47,12 @@ export async function deployTriggers(
 // contains all the errors from attempted deletions.
 export async function undeployTriggers(
   triggers: string[],
-  namespace: string
+  credentials: Credentials
 ): Promise<Error[]> {
   const errors: any[] = [];
   for (const trigger of triggers) {
     try {
-      await undeployTrigger(trigger, namespace);
+      await undeployTrigger(trigger, credentials);
     } catch (err) {
       const msg = err.message ? err.message : err;
       errors.push(new Error(`unable to undeploy trigger '${trigger}': ${msg}`));
@@ -68,18 +67,19 @@ export async function undeployTriggers(
 async function deployTrigger(
   trigger: TriggerSpec,
   functionName: string,
-  namespace: string
+  credentials: Credentials
 ): Promise<DeploySuccess | Error> {
   const details = trigger.scheduledDetails;
   const { cron, body } = details;
   const { enabled } = trigger;
+  const { do_token } = credentials;
   try {
-    if (doAPIKey) {
+    if (do_token) {
       debug('calling the trigger API to create %s', trigger.name);
       return await doTriggerCreate(
         trigger.name,
         functionName,
-        namespace,
+        credentials,
         cron,
         enabled,
         body
@@ -104,18 +104,18 @@ async function deployTrigger(
 async function doTriggerCreate(
   trigger: string,
   fcn: string,
-  namespace: string,
+  credentials: Credentials,
   cron: string,
   enabled: boolean,
   withBody: object
 ): Promise<DeploySuccess> {
   try {
-    await doTriggerDelete(trigger, namespace);
+    await doTriggerDelete(trigger, credentials);
   } catch {
     // DO NOTHING, this assumes the trigger never existed.
   }
   const config: AxiosRequestConfig = {
-    url: `${doAPIEndpoint}/v2/functions/namespaces/${namespace}/triggers`,
+    url: `${doAPIEndpoint}/v2/functions/namespaces/${credentials.namespace}/triggers`,
     method: 'post',
     data: {
       name: trigger,
@@ -129,26 +129,31 @@ async function doTriggerCreate(
     }
   };
   debug('trigger create request config is: %O', config);
-  await doAxios(config);
+  await doAxios(config, credentials.do_token);
   return { name: trigger, kind: 'trigger', skipped: false };
 }
 
 // Perform a network operation with axios, given a config object.
 // The config object should be complete except for headers.  The auth header
 // is added here.  The function assumes that doApiKey is set.
-async function doAxios(config: AxiosRequestConfig): Promise<object> {
+async function doAxios(
+  config: AxiosRequestConfig,
+  token: string
+): Promise<object> {
   config.headers = {
-    Authorization: `Bearer ${doAPIKey}`
+    Authorization: `Bearer ${token}`
   };
   const response = await axios(config);
   return response.data;
 }
 
 // Code to delete a trigger.
-async function undeployTrigger(trigger: string, namespace: string) {
+async function undeployTrigger(trigger: string, credentials: Credentials) {
   debug('undeploying trigger %s', trigger);
-  if (doAPIKey) {
-    return doTriggerDelete(trigger, namespace);
+  const { do_token } = credentials;
+
+  if (do_token) {
+    return doTriggerDelete(trigger, credentials);
   }
   // Else no-up.  A Promise<void> (non-error) is returned implicitly
 }
@@ -156,23 +161,25 @@ async function undeployTrigger(trigger: string, namespace: string) {
 // Delete a trigger using the real API
 async function doTriggerDelete(
   trigger: string,
-  namespace: string
+  credentials: Credentials
 ): Promise<object> {
   const config: AxiosRequestConfig = {
-    url: `${doAPIEndpoint}/v2/functions/namespaces/${namespace}/triggers/${trigger}`,
+    url: `${doAPIEndpoint}/v2/functions/namespaces/${credentials.namespace}/triggers/${trigger}`,
     method: 'delete'
   };
-  return doAxios(config);
+  return doAxios(config, credentials.do_token);
 }
 
 // Code to get all the triggers for a namespace, or all the triggers for a function in the namespace.
 export async function listTriggersForNamespace(
   namespace: string,
+  credentials: Credentials,
   fcn?: string
 ): Promise<string[]> {
   debug('listing triggers');
-  if (doAPIKey) {
-    return doTriggerList(namespace, fcn);
+  const { do_token } = credentials;
+  if (do_token) {
+    return doTriggerList(namespace, credentials, fcn);
   }
   // No-op if no envvars are set
   return [];
@@ -191,6 +198,7 @@ interface TriggerInfo {
 // provided by the API so it is done here.
 async function doTriggerList(
   namespace: string,
+  credentials: Credentials,
   fcn: string
 ): Promise<string[]> {
   const config: AxiosRequestConfig = {
@@ -199,7 +207,7 @@ async function doTriggerList(
   };
   let triggers: TriggerList;
   try {
-    triggers = (await doAxios(config)) as TriggerList;
+    triggers = (await doAxios(config, credentials.do_token)) as TriggerList;
   } catch (err) {
     debug('error listing triggers: %s', err.message);
     return [];

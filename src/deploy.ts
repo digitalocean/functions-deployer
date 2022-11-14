@@ -19,7 +19,8 @@ import {
   VersionEntry,
   KeyVal,
   Feedback,
-  DeploySuccess
+  DeploySuccess,
+  Credentials
 } from './deploy-struct';
 import {
   combineResponses,
@@ -72,7 +73,7 @@ export async function cleanOrLoadVersions(
     );
   } else {
     if (todeploy.cleanNamespace && todeploy.includer.isIncludingEverything()) {
-      await wipe(todeploy.owClient);
+      await wipe(todeploy.owClient, todeploy.credentials);
     } else {
       await cleanActionsAndPackages(todeploy);
     }
@@ -167,7 +168,12 @@ function cleanActionsAndPackages(
     ) {
       // We should have headed off 'clean' of the default package already.  The added test is just in case
       promises.push(
-        cleanPackage(todeploy.owClient, pkg.name, todeploy.versions)
+        cleanPackage(
+          todeploy.owClient,
+          todeploy.credentials,
+          pkg.name,
+          todeploy.versions
+        )
       );
     } else if (pkg.actions) {
       for (const action of pkg.actions) {
@@ -180,9 +186,11 @@ function cleanActionsAndPackages(
             delete todeploy.versions.actionVersions[action.name];
           }
           promises.push(
-            deleteAction(getActionName(action), todeploy.owClient).catch(
-              () => undefined
-            )
+            deleteAction(
+              getActionName(action),
+              todeploy.owClient,
+              todeploy.credentials
+            ).catch(() => undefined)
           );
         }
       }
@@ -195,6 +203,7 @@ function cleanActionsAndPackages(
 // The 'versions' argument can be undefined, allowing this to be used to delete packages without a project context
 export async function cleanPackage(
   client: openwhisk.Client,
+  credentials: Credentials,
   name: string,
   versions: VersionEntry
 ): Promise<openwhisk.Package> {
@@ -217,7 +226,7 @@ export async function cleanPackage(
       if (versions && versions.actionVersions) {
         delete versions.actionVersions[action.name];
       }
-      await deleteAction(name + '/' + action.name, client);
+      await deleteAction(name + '/' + action.name, client, credentials);
     }
   }
 }
@@ -764,7 +773,7 @@ async function deployActionFromCodeOrSequence(
       triggerResults = await deployTriggers(
         action.triggers,
         name,
-        spec.credentials.namespace
+        spec.credentials
       );
     }
     const map = {};

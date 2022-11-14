@@ -86,7 +86,11 @@ export function addCredential(
   nsMap[namespace] = { api_key };
   store.currentHost = apihost;
   store.currentNamespace = namespace;
-  return { namespace, ow: { apihost, api_key } };
+  return {
+    namespace,
+    ow: { apihost, api_key },
+    do_token: process.env.DO_API_KEY
+  };
 }
 
 // Remove a namespace from the credential store
@@ -163,7 +167,8 @@ export function getCredentialsFromEnvironment(): Credentials {
   const apihost = process.env.__OW_API_HOST;
   const namespace = process.env.__OW_NAMESPACE;
   const api_key = process.env.__OW_API_KEY;
-  return { namespace, ow: { api_key, apihost } };
+  const do_token = process.env.DO_API_KEY;
+  return { namespace, ow: { api_key, apihost }, do_token };
 }
 
 // Get the credentials for a namespace.  Similar logic to switchNamespace but does not change which
@@ -189,7 +194,8 @@ export async function getCredentials(): Promise<Credentials> {
   const { api_key } = entry;
   return {
     namespace: store.currentNamespace,
-    ow: { apihost: store.currentHost, api_key }
+    ow: { apihost: store.currentHost, api_key },
+    do_token: process.env.DO_API_KEY
   };
 }
 
@@ -349,7 +355,11 @@ function getUniqueCredentials(
   }
   const { api_key } = credentialEntry;
   debug('have authkey: %s', api_key);
-  return { namespace, ow: { apihost: newHost, api_key } };
+  return {
+    namespace,
+    ow: { apihost: newHost, api_key },
+    do_token: process.env.DO_API_KEY
+  };
 }
 
 // GitHub credentials section

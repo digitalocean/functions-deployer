@@ -342,7 +342,11 @@ async function processCredentials(
   }
   let creds: Credentials | undefined;
   if (apihost && auth) {
-    creds = { namespace: undefined, ow: owOptions };
+    creds = {
+      namespace: undefined,
+      ow: owOptions,
+      do_token: process.env.DO_API_TOKEN
+    };
   }
   return creds;
 }
