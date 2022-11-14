@@ -1,4 +1,3 @@
-## TODO Discuss with Josh, dosls will "never" return an error so we should always assert_success
 load ../test_helper.bash
 
 setup_file() {
