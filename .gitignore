@@ -4,3 +4,7 @@ node_modules
 *.bak
 dosls
 .DS_Store
+bin/doctl
+
+e2e/*/.deployed
+*.env.test
