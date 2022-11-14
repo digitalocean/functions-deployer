@@ -1,0 +1,11 @@
+name: Pull Request
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    uses: ./.github/workflows/_build.yml
+  lint:
+    uses: ./.github/workflows/_lint.yml
+  unit-tests:
+    uses: ./.github/workflows/_unit-test.yml

@@ -8,3 +8,4 @@ bin/doctl
 
 .deployed
 *.env.test
+coverage/

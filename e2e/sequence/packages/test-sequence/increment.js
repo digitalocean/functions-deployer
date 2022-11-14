@@ -16,5 +16,5 @@
  */
 
 function main({ value }) {
-	return { value: parseInt(value, 10) + 1 }
+  return { value: parseInt(value, 10) + 1 };
 }

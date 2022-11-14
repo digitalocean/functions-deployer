@@ -1,5 +1,5 @@
 function main(args) {
-    return {
-				multi: process.env.MULTI
-    }
+  return {
+    multi: process.env.MULTI
+  };
 }

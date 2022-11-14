@@ -1,19 +1,19 @@
-name: Nimbella Deployer Library Build
+name: Build Functions Deployer
 
-on: [push, pull_request]
+on:
+  workflow_call:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-
     strategy:
       matrix:
+        os: [ ubuntu-latest, windows-latest, macos-latest ]
         node-version: [16.x]
+    runs-on: ${{ matrix.os }}
 
     steps:
     - uses: actions/checkout@v2
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v2
+    - uses: actions/setup-node@v2
       with:
         node-version: ${{ matrix.node-version }}
     - name: Install dependencies
