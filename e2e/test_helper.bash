@@ -28,12 +28,12 @@ delete_package() {
 }
 
 init_namespace() {
-  $DOCTL auth init --access-token  $DO_API_KEY
+  $DOCTL auth init $DO_API_KEY
   $DOCTL sls install
-  
+  $DOCTL sls connect $TEST_NAMESPACE
+
   CREDS=$($DOCTL sls status --credentials)
   export NIMBELLA_DIR=$(echo $CREDS | jq -r .Path)
-  echo "dir is $NIMBELLA_DIR"
 }
 
 test_binary_action() {

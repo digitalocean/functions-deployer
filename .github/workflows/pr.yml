@@ -12,5 +12,5 @@ jobs:
   e2e-tests:
     uses: ./.github/workflows/_e2e-tests.yml
     secrets:
-      DO_API_KEY: ${{secrets.DO_API_KEY}}
-      TEST_NAMESPACE: ${{secrets.TEST_NAMESPACE}}
+      DO_API_KEY: ${{ secrets.DO_API_KEY }}
+      TEST_NAMESPACE: ${{ secrets.TEST_NAMESPACE }}
