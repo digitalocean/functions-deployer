@@ -7,6 +7,7 @@ if [ -f ../.env.test ]; then
   export $(echo $(cat ../.env.test | sed 's/#.*//g' | xargs) | envsubst)
 fi
 
+echo "foo is $FOO"
 if [ -z "$DO_API_KEY" ]; then
   kill $PPID
   echo "Missing DO_API_KEY"
