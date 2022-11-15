@@ -82,7 +82,7 @@
     "prepack": "npm run build",
     "test": "jest",
     "test:coverage": "jest --coverage",
-    "test:e2e": "cd ./e2e && bats -rT .",
+    "test:e2e": "cd ./e2e && bats -rtT .",
     "build": "tsc && node esbuild.config.js",
     "lint": "eslint --ext js,ts src",
     "format": "prettier --write \"./**/*.{js,ts,json}\"",
