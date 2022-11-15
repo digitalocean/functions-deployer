@@ -28,7 +28,7 @@ delete_package() {
 }
 
 init_namespace() {
-  $DOCTL auth init $DO_API_KEY
+  $DOCTL auth init --access-token  $DO_API_KEY
   $DOCTL sls install
   $DOCTL sls connect $TEST_NAMESPACE
 
