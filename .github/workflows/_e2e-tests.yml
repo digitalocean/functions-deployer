@@ -2,17 +2,22 @@ name: E2E Tests
 
 on:
   workflow_call:
+    secrets:
+      DO_API_KEY: 
+        required: true
+      TEST_NAMESPACE: 
+        required: true
 
 jobs:
   e2e-test:
     strategy:
       max-parallel: 1
       matrix:
-        go-version: [ 1.18.x ]
-        os: [ ubuntu-latest ]
+        go-version: [1.18.x]
+        os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
     concurrency: deployer-e2e-tests
-    
+
     steps:
       - uses: actions/checkout@v2
 
@@ -28,12 +33,9 @@ jobs:
 
       - name: Download latest doctl release
         run: ./scripts/getDoctl.sh
-        
+
       - name: Run e2e tests
-        run: |
-          echo $FOO
-          npm run test:e2e
-        env: 
-          FOO: test123
-          DO_API_KEY: ${{ secrets.DO_API_KEY }}
-          TEST_NAMESPACE: ${{ secrets.TEST_NAMESPACE }}
+        run: npm run test:e2e
+        env:
+          DO_API_KEY: ${{secrets.DO_API_KEY}}
+          TEST_NAMESPACE: ${{secrets.TEST_NAMESPACE}}
