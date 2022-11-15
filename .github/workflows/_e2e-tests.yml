@@ -37,5 +37,5 @@ jobs:
       - name: Run e2e tests
         run: npm run test:e2e
         env:
-          DO_API_KEY: ${{secrets.DO_API_KEY}}
-          TEST_NAMESPACE: ${{secrets.TEST_NAMESPACE}}
+          DO_API_KEY: ${{ secrets.DO_API_KEY }}
+          TEST_NAMESPACE: ${{ secrets.TEST_NAMESPACE }}

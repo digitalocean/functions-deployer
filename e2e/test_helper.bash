@@ -28,14 +28,9 @@ delete_package() {
 }
 
 init_namespace() {
-  run $DOCTL auth init $DO_API_KEY
-  assert_success
-  
-  run $DOCTL sls install
-  assert_success
-
-  run $DOCTL sls connect $TEST_NAMESPACE
-  assert_success
+  $DOCTL auth init --access-token  $DO_API_KEY
+  $DOCTL sls install
+  $DOCTL sls connect $TEST_NAMESPACE
   
   export NIMBELLA_DIR=(bash -c "$DOCTL sls status --credentials | jq -r '.Path'")
   
