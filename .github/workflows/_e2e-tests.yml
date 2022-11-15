@@ -30,7 +30,4 @@ jobs:
         run: ./scripts/getDoctl.sh
         
       - name: Run e2e tests
-        run: npm run test:e2e
-        env: 
-          DO_API_KEY: ${{ secrets.DO_API_KEY }}
-          TEST_NAMESPACE: ${{ secrets.TEST_NAMESPACE }}
+        run: DO_API_KEY=${{ secrets.DO_API_KEY }} TEST_NAMESPACE=${{ secrets.TEST_NAMESPACE }} npm run test:e2e
