@@ -13,7 +13,7 @@ jobs:
     strategy:
       max-parallel: 1
       matrix:
-        os: [ ubuntu-latest, windows-latest, macos-latest ]
+        os: [ ubuntu-latest,  macos-latest ]
     runs-on: ${{ matrix.os }}
     concurrency: deployer-e2e-tests
 
@@ -30,10 +30,10 @@ jobs:
       - name: Builds deployer binary
         run: npm run build
 
-      - name: Download latest doctl release
+      - name: Download latest doctl release for ${{ matrix.os }}
         run: ./scripts/getDoctl.sh
 
-      - name: Run e2e tests
+      - name: Run e2e tests for ${{ matrix.os }}
         run: npm run test:e2e
         env:
           DO_API_KEY: ${{ secrets.DO_API_KEY }}
