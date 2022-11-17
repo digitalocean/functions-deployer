@@ -605,12 +605,12 @@ async function doRemoteActionBuild(
   // Add the project.yml
   const spec = makeConfigFromActionSpec(action, project, pkgName);
   debug('converting slice spec to YAML: %O', spec);
-  
+
   // Uncomment this when support is added in the build container runtime
   // const { config, key } = encryptProjectConfig(yaml.safeDump(spec))
   const config = yaml.safeDump(spec);
   const key = undefined;
-  
+
   zip.append(config, { name: 'project.yml' });
   debug('finalizing zip for project slice');
   zip.finalize();
@@ -631,7 +631,7 @@ async function doRemoteActionBuild(
     project.owClient,
     project.feedback,
     action,
-    key,
+    key
   );
   return action;
 }

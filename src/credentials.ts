@@ -50,7 +50,7 @@ function credentialStore() {
 // Exports
 
 // Encryption key used to decrypt the project.yml configuration while performing a remote build.
-export const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY
+export const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
 
 // The type of a persistance manager, which will differ between cloud and local
 export interface Persister {
