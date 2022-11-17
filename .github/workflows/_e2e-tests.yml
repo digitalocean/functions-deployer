@@ -1,0 +1,40 @@
+name: E2E Tests
+
+on:
+  workflow_call:
+    secrets:
+      DO_API_KEY: 
+        required: true
+      TEST_NAMESPACE: 
+        required: true
+
+jobs:
+  e2e-test:
+    strategy:
+      max-parallel: 1
+      matrix:
+        os: [ ubuntu-latest ]
+    runs-on: ${{ matrix.os }}
+    concurrency: deployer-e2e-tests
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions/setup-node@v2
+        with:
+          node-version: 16.x
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Builds deployer binary
+        run: npm run build
+
+      - name: Download latest doctl release for ${{ matrix.os }}
+        run: ./scripts/getDoctl.sh
+
+      - name: Run e2e tests for ${{ matrix.os }}
+        run: npm run test:e2e
+        env:
+          DO_API_KEY: ${{ secrets.DO_API_KEY }}
+          TEST_NAMESPACE: ${{ secrets.TEST_NAMESPACE }}

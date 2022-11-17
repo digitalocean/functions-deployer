@@ -28,12 +28,12 @@ delete_package() {
 }
 
 init_namespace() {
-  $DOCTL auth init $DO_API_KEY
+  $DOCTL auth init --access-token  $DO_API_KEY
   $DOCTL sls install
   $DOCTL sls connect $TEST_NAMESPACE
 
-  ## Ideal way to auth the deployer
-  # export NIMBELLA_DIR=bash -c "$DOCTL sls status --credentials | jq -r '.path'"
+  CREDS=$($DOCTL sls status --credentials)
+  export NIMBELLA_DIR=$(echo $CREDS | jq -r .Path)
 }
 
 test_binary_action() {
