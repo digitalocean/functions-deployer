@@ -605,7 +605,12 @@ async function doRemoteActionBuild(
   // Add the project.yml
   const spec = makeConfigFromActionSpec(action, project, pkgName);
   debug('converting slice spec to YAML: %O', spec);
+  
+  // Uncomment this when support is added in the build container runtime
+  // const { config, key } = encryptProjectConfig(yaml.safeDump(spec))
   const config = yaml.safeDump(spec);
+  const key = undefined;
+  
   zip.append(config, { name: 'project.yml' });
   debug('finalizing zip for project slice');
   zip.finalize();
@@ -625,7 +630,8 @@ async function doRemoteActionBuild(
     toSend,
     project.owClient,
     project.feedback,
-    action
+    action,
+    key,
   );
   return action;
 }
@@ -931,7 +937,8 @@ async function invokeRemoteBuilder(
   zipped: Buffer,
   owClient: openwhisk.Client,
   feedback: Feedback,
-  action?: ActionSpec
+  action?: ActionSpec,
+  encryptionKey?: string
 ): Promise<string> {
   // Upload project slice
   const params = { action: computeTag(action) };
@@ -970,7 +977,7 @@ async function invokeRemoteBuilder(
   try {
     const invoked = await owClient.actions.invoke({
       name: buildActionName,
-      params: { toBuild: sliceName }
+      params: { toBuild: sliceName, encryptionKey }
     });
     feedback.progress(
       `Submitted ${activityName} for remote building and deployment in runtime ${kind} (id: ${invoked.activationId})`
