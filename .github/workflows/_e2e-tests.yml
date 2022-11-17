@@ -13,7 +13,7 @@ jobs:
     strategy:
       max-parallel: 1
       matrix:
-        os: [  macos-latest ]
+        os: [ ubuntu-latest ]
     runs-on: ${{ matrix.os }}
     concurrency: deployer-e2e-tests
 
