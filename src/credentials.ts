@@ -48,6 +48,7 @@ function credentialStore() {
 }
 
 // Exports
+
 // The type of a persistance manager, which will differ between cloud and local
 export interface Persister {
   loadCredentialStoreIfPresent: () => CredentialStore;
