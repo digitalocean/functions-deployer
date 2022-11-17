@@ -32,7 +32,7 @@ fi
 
 # Gets the latest release of doclt using the GitHub API
 # and saves it in bin directory.
-echo  "version is" $(curl --silent "https://api.github.com/repos/digitalocean/doctl/releases/latest" | jq -r .tag_name)
+echo  "$(curl "https://api.github.com/repos/digitalocean/doctl/releases/latest")
 VERSION=$(curl --silent "https://api.github.com/repos/digitalocean/doctl/releases/latest" | jq -r .tag_name | sed 's/v//')
 NAME="doctl-$VERSION-$OS-$ARCH.$SUFFIX"
 DOWNLOAD_URL="https://github.com/digitalocean/doctl/releases/download/v$VERSION/$NAME"
