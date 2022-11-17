@@ -43,7 +43,7 @@ import * as yaml from 'js-yaml';
 import makeDebug from 'debug';
 import anymatch from 'anymatch';
 import { parseGithubRef } from './github';
-import { ENCRYPTION_KEY, nimbellaDir } from './credentials';
+import { nimbellaDir } from './credentials';
 import {
   isBinaryFileExtension,
   runtimeForZipMid,
@@ -86,8 +86,9 @@ export async function loadProjectConfig(
   return reader.readFileContents(configFile).then(async (data) => {
     let configData = String(data);
 
-    if (ENCRYPTION_KEY) {
-      configData = decryptProjectConfig(data.toString(), ENCRYPTION_KEY);
+    const encryptionKey = process.env.ENCRYPTION_KEY;
+    if (encryptionKey) {
+      configData = decryptProjectConfig(configData, encryptionKey);
     }
 
     try {
