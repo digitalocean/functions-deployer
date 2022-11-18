@@ -82,11 +82,19 @@ export async function loadProjectConfig(
 ): Promise<DeployStructure> {
   const learnMore =
     '   Learn more about the project configuration file https://docs.digitalocean.com/products/functions/reference/project-configuration/';
+
   return reader.readFileContents(configFile).then(async (data) => {
+    let configData = String(data);
+
+    const encryptionKey = process.env.ENCRYPTION_KEY;
+    if (encryptionKey) {
+      configData = decryptProjectConfig(configData, encryptionKey);
+    }
+
     try {
       // Read the config, substituting from env
       const { content, badVars } = substituteFromEnvAndFiles(
-        String(data),
+        String(configData),
         envPath,
         filePath,
         feedback
@@ -138,6 +146,34 @@ export async function loadProjectConfig(
       return errorStructure(err);
     }
   });
+}
+
+export function encryptProjectConfig(config: string): {
+  config: string;
+  key: string;
+} {
+  const key = crypto.randomBytes(32);
+  const iv = Buffer.alloc(16).fill(0);
+  const cipher = crypto.createCipheriv('aes256', key, iv);
+  const encrypted = cipher.update(config, 'utf8', 'hex') + cipher.final('hex');
+  return {
+    config: encrypted,
+    key: key.toString('hex')
+  };
+}
+
+export function decryptProjectConfig(config: string, key: string): string {
+  const iv = Buffer.alloc(16).fill(0);
+  const decipher = crypto.createDecipheriv(
+    'aes256',
+    Buffer.from(key, 'hex'),
+    iv
+  );
+  const decryptedMessage = Buffer.concat([
+    decipher.update(config, 'hex'),
+    decipher.final()
+  ]);
+  return decryptedMessage.toString('utf8');
 }
 
 // Rename any 'functions' members of the contained PackageSpecs of a config to 'actions'.
