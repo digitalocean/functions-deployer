@@ -803,7 +803,7 @@ function makeConfigFromActionSpec(
 // Remove undefined fields from object (mutates object but returns it as well)
 function removeUndefined(obj: Record<string, any>): Record<string, any> {
   for (const item in obj) {
-    if (!obj[item]) {
+    if (typeof obj[item] === 'undefined') {
       delete obj[item];
     } else if (typeof obj[item] === 'object') {
       obj[item] = removeUndefined(obj[item]);
