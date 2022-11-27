@@ -39,7 +39,12 @@
     "yargs-parser": "^21.1.1"
   },
   "overrides": {
-    "needle": "3.1.0"
+    "engine.io": "^6.2.1",
+    "engine.io-client": "^6.2.3",
+    "needle": "3.1.0",
+    "node-uuid": "^1.4.4",
+    "sockjs": "^0.3.24",
+    "xmlhttprequest": "^1.8.0"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.4.33",
@@ -58,8 +63,8 @@
     "bats-assert": "https://github.com/bats-core/bats-assert.git",
     "bats-support": "https://github.com/bats-core/bats-support.git",
     "esbuild": "^0.14.36",
-    "eslint": "^8.27.0",
     "esbuild-node-externals": "^1.4.1",
+    "eslint": "^8.27.0",
     "eslint-config-prettier": "^8.5.0",
     "jest": "^29.2.2",
     "prettier": "^2.7.1",
