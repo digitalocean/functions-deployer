@@ -1,6 +1,9 @@
 /lib
 node_modules
 *.tgz
+digitalocean-functions-deployer-*.tgz
+sandbox
+doctl-sandbox-*.tar.gz
 *.bak
 dosls
 .DS_Store
