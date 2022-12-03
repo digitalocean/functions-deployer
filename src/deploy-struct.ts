@@ -53,7 +53,7 @@ export interface ActionSpec {
   limits?: Limits; // Action limits (time, memory, logs)
   clean?: boolean; // Indicates that an old copy of the action should be removed before deployment
   remoteBuild?: boolean; // States that the build (if any) must be done remotely
-  localBuild?: boolean; // States that the build (if any) must be done locally (precludes a github deploy in the cloud)
+  localBuild?: boolean; // States that the build (if any) must be done locally
   triggers?: TriggerSpec[]; // Triggers for the function if any
   // Build information (not specifiable in the config)
   build?: string;
@@ -139,7 +139,6 @@ export interface DeployStructure {
   libBuild?: string; // Type of build (build.sh or package.json) to apply to the lib directory
   strays?: string[]; // files or directories found in the project that don't fit the model, not necessarily an error
   filePath?: string; // The location of the project on disk
-  githubPath?: string; // The original github path specified, if deploying from github
   owClient?: Client; // The openwhisk client for deploying actions and packages
   includer?: Includer; // The 'includer' for deciding which packages, actions, web are included in the deploy
   reader?: ProjectReader; // The project reader to use
@@ -177,28 +176,6 @@ export interface DeployResponse {
   actionVersions: VersionMap;
   apihost?: string;
   webHashes?: { [key: string]: string };
-}
-
-// Structure sent to the remote builder
-// This declaration is taken directly from https://github.com/nimbella-corp/main/tree/master/builder/docs
-// Most fields are irrelevant to deployer use.  I believe
-//    'auth' is required in order to authenticate the request.
-//    'code' will contain the zipped slice (how do I convey that this contains a zipped slice and not the legacy input to the builder?  Do I need to?)
-//    'binary' will always be true
-//    'kind' will be set to convey the runtime to use (must support pre-compile, which hopefully will be every runtime soon)
-//    'action' may contain the action name but I don't expect it to be used since the builder shouldn't deploy slices itself.  Also, if
-//      the slice is a web build, 'action' will be set to ''.
-//    'main' and 'extra' will be unused (since `nim project deploy` will deploy the slice).   I will set them to empty strings.
-export interface SliceRequest {
-  value: {
-    auth: string;
-    code: string;
-    binary: boolean;
-    main: string;
-    kind: string;
-    action: string;
-    extra: any;
-  };
 }
 
 // The version file entry for a given deployment
@@ -254,10 +231,6 @@ export interface CredentialStore {
   currentHost: string;
   currentNamespace: string;
   credentials: CredentialHostMap;
-  currentGithub?: string;
-  github?: { [key: string]: string };
-  currentPostman?: string;
-  postman?: { [key: string]: string };
 }
 
 export interface CredentialHostMap {
@@ -316,7 +289,9 @@ export type PathKind = {
 // Path names passed to these methods may, in the most general case, be either absolute or relative to the
 // project root.  After canonicalizing `..` directives in such paths, they may point inside or outside the project.
 // For the file system, we accept absolute paths and allow a relative path to land anywhere in the file system.
-// For github we reject absolute paths ane require a relative path to land within the github repo that contains the project.
+// Historically, there was also a github reader which has been discontinued; therefore, currently, the file
+// system reader is the only exemplar of this interface.  I think the interface is worth retaining, however,
+// for future experimentation.
 export interface ProjectReader {
   // Read the contents of a directory (non-recursively)
   readdir: (path: string) => Promise<PathKind[]>;
@@ -326,7 +301,7 @@ export interface ProjectReader {
   isExistingFile: (path: string) => Promise<boolean>;
   // Get the PathKind of a path
   getPathKind: (path: string) => Promise<PathKind>;
-  // Get the location of the project in a real file system (returns null for github)
+  // Get the location of the project in a real file system (returns null for "non-real" file systems, if any)
   getFSLocation: () => string | null;
 }
 

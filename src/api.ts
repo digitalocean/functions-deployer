@@ -135,17 +135,15 @@ export function deploy(todeploy: DeployStructure): Promise<DeployResponse> {
   return cleanOrLoadVersions(todeploy)
     .then(doDeploy)
     .then((results) => {
-      if (!todeploy.githubPath) {
-        const statusDir = writeProjectStatus(
-          todeploy.filePath,
-          results,
-          todeploy.includer.isIncludingEverything()
+      const statusDir = writeProjectStatus(
+        todeploy.filePath,
+        results,
+        todeploy.includer.isIncludingEverything()
+      );
+      if (statusDir && !todeploy.slice) {
+        todeploy.feedback.progress(
+          `Deployment status recorded in '${statusDir}'`
         );
-        if (statusDir && !todeploy.slice) {
-          todeploy.feedback.progress(
-            `Deployment status recorded in '${statusDir}'`
-          );
-        }
       }
       if (!results.namespace && todeploy.credentials) {
         results.namespace = todeploy.credentials.namespace;
@@ -175,7 +173,6 @@ export async function readProject(
       envPath,
       buildEnvPath,
       includer,
-      false,
       feedback
     );
     const parts = await buildStructureParts(topLevel);
@@ -199,7 +196,7 @@ export async function readProject(
   }
   if (needsLocalBuilds && ans.reader.getFSLocation() === null) {
     debug(
-      "project '%s' will be re-read and cached because it's a github project that needs local building",
+      "project '%s' will be re-read and cached because it is covered by a non-file-system reader and needs local building",
       projectPath
     );
     try {
@@ -208,7 +205,6 @@ export async function readProject(
         envPath,
         buildEnvPath,
         includer,
-        true,
         feedback
       );
       const parts = await buildStructureParts(topLevel);

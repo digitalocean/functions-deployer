@@ -13,7 +13,6 @@
 
 import * as path from 'path';
 import * as fs from 'fs';
-import { getUserAgent } from './api';
 import {
   DeployStructure,
   PackageSpec,
@@ -33,10 +32,8 @@ import {
   getBestProjectName
 } from './util';
 import { getBuildForAction, getBuildForLibOrWeb } from './finder-builder';
-import { isGithubRef, parseGithubRef, fetchProject } from './github';
 import makeDebug from 'debug';
 import { makeFileReader } from './file-reader';
-import { makeGithubReader } from './github-reader';
 import { fetchSlice } from './slice-reader';
 const debug = makeDebug('nim:deployer:project-reader');
 
@@ -53,7 +50,6 @@ interface TopLevel {
   buildEnv?: string;
   strays: string[];
   filePath: string;
-  githubPath: string;
   includer: Includer;
   reader: ProjectReader;
   feedback: Feedback;
@@ -63,16 +59,11 @@ export async function readTopLevel(
   env: string,
   buildEnv: string,
   includer: Includer,
-  mustBeLocal: boolean,
   feedback: Feedback
 ): Promise<TopLevel> {
-  // The mustBeLocal arg is only important if the filePath denotes a github location.  In that case, a true value for
-  // mustBeLocal causes the github contents to be fetched to a local cache and a FileReader is used.  A false value
-  // causes a GithubReader to be used.
   debug(
-    "readTopLevel with filePath:'%s' and mustBeLocal:'%s'",
-    filePath,
-    String(mustBeLocal)
+    "readTopLevel with filePath:'%s'",
+    filePath
   );
   debug('feedback is %O', feedback);
   // Before doing the more expensive operations, check existence of env, which is cheap.  If does not exist we will fail later anyway.
@@ -84,37 +75,15 @@ export async function readTopLevel(
       `The specified environment file '${buildEnv}' does not exist`
     );
   }
-  let githubPath: string;
   let reader: ProjectReader;
-  if (isGithubRef(filePath)) {
-    const github = parseGithubRef(filePath);
-    if (!github.auth) {
-      feedback.warn(
-        'Warning: access to GitHub will be un-authenticated; rate will be severely limited'
-      );
+  if (filePath.startsWith('slice:')) {
+    debug('fetching slice');
+    filePath = await fetchSlice(filePath.replace('slice:', ''));
+    if (!filePath) {
+      throw new Error('Could not fetch slice');
     }
-    githubPath = filePath;
-    if (mustBeLocal) {
-      debug('github path which must be local, making file reader');
-      filePath = await fetchProject(github, getUserAgent());
-      reader = makeFileReader(filePath);
-    } else {
-      debug(
-        'Github path which is permitted to be remote, making Github reader'
-      );
-      reader = makeGithubReader(github, getUserAgent());
-    }
-  } else {
-    debug('not a github path, making file reader');
-    if (filePath.startsWith('slice:')) {
-      debug('fetching slice');
-      filePath = await fetchSlice(filePath.replace('slice:', ''));
-      if (!filePath) {
-        throw new Error('Could not fetch slice');
-      }
-    }
-    reader = makeFileReader(filePath);
   }
+  reader = makeFileReader(filePath);
   const pkgDir = 'packages';
   const libDir = 'lib';
   return reader.readdir('').then((items) => {
@@ -165,10 +134,6 @@ export async function readTopLevel(
     if (notconfig && !config) {
       feedback.warn('Warning: found %s but no %s', notconfig, CONFIG_FILE);
     }
-    if (githubPath) {
-      debug('github path was %s', githubPath);
-      debug('filePath is %s', filePath);
-    }
     const ans = {
       lib,
       packages,
@@ -177,7 +142,6 @@ export async function readTopLevel(
       filePath,
       env,
       buildEnv,
-      githubPath,
       includer,
       reader,
       feedback
@@ -200,7 +164,6 @@ export async function buildStructureParts(
     filePath,
     env,
     buildEnv,
-    githubPath,
     includer,
     reader,
     feedback
@@ -216,11 +179,10 @@ export async function buildStructureParts(
   );
   const deployerAnnotation =
     configPart.deployerAnnotation ||
-    (await getDeployerAnnotation(filePath, githubPath));
+    (await getDeployerAnnotation(filePath));
   configPart = Object.assign(configPart, {
     strays,
     filePath,
-    githubPath,
     includer,
     reader,
     feedback,

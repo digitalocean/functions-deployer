@@ -41,7 +41,6 @@ import axios from 'axios';
 import archiver from 'archiver';
 import touch from 'touch';
 import makeDebug from 'debug';
-import { isGithubRef } from './github';
 import { Writable } from 'stream';
 import * as memoryStreams from 'memory-streams';
 import openwhisk = require('openwhisk');
@@ -263,7 +262,7 @@ function joinAndNormalize(...paths: string[]): string {
 }
 
 // Convert a path that is relative to the project root into a path usable with 'fs'.  This should be done only for things
-// that require real building since it will abort the deploy when the project root is a github location.
+// that require real building since it will abort the deploy when the project root cannot be found in the file system.
 function makeLocal(reader: ProjectReader, ...paths: string[]): string {
   const project = reader.getFSLocation();
   if (!project) {
@@ -504,7 +503,7 @@ export async function maybeBuildLib(spec: DeployStructure): Promise<void> {
 function checkBuiltLocally(reader: ProjectReader, localPath: string) {
   const loc = reader.getFSLocation();
   if (!loc) {
-    debug('checkBuiltLocally skipped because deploying from github');
+    debug('checkBuiltLocally skipped because project reader does not use local file system');
     return;
   }
   const filepath = path.join(loc, localPath);
@@ -1283,13 +1282,6 @@ function build(
         // Remotely, we always dump the result because it always has to be shown on error.
         if (!verbose || slice) {
           feedback.warn('Output of failed build in %s', realPath);
-          if (isGithubRef(displayPath)) {
-            feedback.warn(
-              '%s is a cache location for %s',
-              realPath,
-              displayPath
-            );
-          }
           feedback.warn(result);
         }
         reject(new Error(`'${errorTag}' exited with code ${code}`));
@@ -1352,7 +1344,8 @@ function scriptAppearsBuilt(filepath: string): boolean {
 }
 
 // Determine if a new zip should be generated.  The existing zip is considered current if it is newer than its dependencies.
-// This won't happen when zipping is in memory because that only happens in the 'from github' case which does not support incremental.
+// This won't happen when zipping is in memory because that only happens when there is no local file system and
+// hence no possibility of incremental building.
 function zipFileAppearsCurrent(
   zipfile: string,
   dependencies: string[]
