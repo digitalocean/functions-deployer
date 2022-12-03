@@ -1253,7 +1253,9 @@ export function getBestProjectName(project: DeployStructure): string {
 
 // Calculate the 'deployer' annotation for inclusion in package and action annotations.  This won't change
 // in the course of a deploy run so can be calculated once for inclusion in everything that is deployed.
-export async function getDeployerAnnotation(project: string): Promise<DeployerAnnotation> {
+export async function getDeployerAnnotation(
+  project: string
+): Promise<DeployerAnnotation> {
   const digest = undefined;
   try {
     const git = simplegit();

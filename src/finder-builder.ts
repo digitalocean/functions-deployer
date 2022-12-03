@@ -503,7 +503,9 @@ export async function maybeBuildLib(spec: DeployStructure): Promise<void> {
 function checkBuiltLocally(reader: ProjectReader, localPath: string) {
   const loc = reader.getFSLocation();
   if (!loc) {
-    debug('checkBuiltLocally skipped because project reader does not use local file system');
+    debug(
+      'checkBuiltLocally skipped because project reader does not use local file system'
+    );
     return;
   }
   const filepath = path.join(loc, localPath);

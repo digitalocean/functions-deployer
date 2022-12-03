@@ -61,10 +61,7 @@ export async function readTopLevel(
   includer: Includer,
   feedback: Feedback
 ): Promise<TopLevel> {
-  debug(
-    "readTopLevel with filePath:'%s'",
-    filePath
-  );
+  debug("readTopLevel with filePath:'%s'", filePath);
   debug('feedback is %O', feedback);
   // Before doing the more expensive operations, check existence of env, which is cheap.  If does not exist we will fail later anyway.
   if (env && !fs.existsSync(env)) {
@@ -177,8 +174,7 @@ export async function buildStructureParts(
     feedback
   );
   const deployerAnnotation =
-    configPart.deployerAnnotation ||
-    (await getDeployerAnnotation(filePath));
+    configPart.deployerAnnotation || (await getDeployerAnnotation(filePath));
   configPart = Object.assign(configPart, {
     strays,
     filePath,
