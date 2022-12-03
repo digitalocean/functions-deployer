@@ -75,7 +75,6 @@ export async function readTopLevel(
       `The specified environment file '${buildEnv}' does not exist`
     );
   }
-  let reader: ProjectReader;
   if (filePath.startsWith('slice:')) {
     debug('fetching slice');
     filePath = await fetchSlice(filePath.replace('slice:', ''));
@@ -83,7 +82,7 @@ export async function readTopLevel(
       throw new Error('Could not fetch slice');
     }
   }
-  reader = makeFileReader(filePath);
+  const reader = makeFileReader(filePath);
   const pkgDir = 'packages';
   const libDir = 'lib';
   return reader.readdir('').then((items) => {
