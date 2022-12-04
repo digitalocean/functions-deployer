@@ -57,12 +57,7 @@ export {
   getApiHosts,
   Persister,
   authPersister,
-  addGithubAccount,
-  getGithubAccounts,
-  deleteGithubAccount,
-  getGithubAuth,
   getCredentialsFromEnvironment,
-  switchGithubAccount,
   nimbellaDir
 } from './credentials';
 export {
@@ -81,7 +76,6 @@ export {
   deleteAction
 } from './util';
 export * from './runtimes';
-export { GithubDef, isGithubRef, parseGithubRef, fetchProject } from './github';
 export { deleteSlice } from './slice-reader';
 export { makeIncluder } from './includer';
 export {

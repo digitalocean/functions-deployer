@@ -42,7 +42,6 @@ import * as crypto from 'crypto';
 import * as yaml from 'js-yaml';
 import makeDebug from 'debug';
 import anymatch from 'anymatch';
-import { parseGithubRef } from './github';
 import { nimbellaDir } from './credentials';
 import {
   isBinaryFileExtension,
@@ -1228,13 +1227,13 @@ export function mapActions(actions: ActionSpec[]): ActionMap {
   return ans;
 }
 
-// Get the best available name for a project for recording.  If project is either in github or in cloned repo
+// Get the best available name for a project for recording.  If project is in a cloned repo
 // the name should reflect the github coordinates and not include incidental aspects of the github URL.
 // If the project is just in the file system we use its absolute path (best we have)
 export function getBestProjectName(project: DeployStructure): string {
   const annot = project.deployerAnnotation;
   if (!annot) {
-    return project.githubPath || project.filePath;
+    return project.filePath;
   }
   if (annot.repository) {
     let repo = annot.repository;
@@ -1255,12 +1254,8 @@ export function getBestProjectName(project: DeployStructure): string {
 // Calculate the 'deployer' annotation for inclusion in package and action annotations.  This won't change
 // in the course of a deploy run so can be calculated once for inclusion in everything that is deployed.
 export async function getDeployerAnnotation(
-  project: string,
-  githubPath: string
+  project: string
 ): Promise<DeployerAnnotation> {
-  if (githubPath) {
-    return Promise.resolve(deployerAnnotationFromGithub(githubPath));
-  }
   const digest = undefined;
   try {
     const git = simplegit();
@@ -1280,18 +1275,6 @@ export async function getDeployerAnnotation(
     const projectPath = path.resolve(project);
     return { user, projectPath, digest };
   }
-}
-
-function deployerAnnotationFromGithub(githubPath: string): DeployerAnnotation {
-  const def = parseGithubRef(githubPath);
-  const repository = `github:${def.owner}/${def.repo}`;
-  return {
-    digest: undefined,
-    user: 'cloud',
-    repository,
-    projectPath: def.path,
-    commit: def.ref || 'master'
-  };
 }
 
 // Wipe all the entities from the namespace referred to by an OW client handle.

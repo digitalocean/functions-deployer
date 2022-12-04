@@ -19,8 +19,6 @@ import {
   Credentials,
   Feedback
 } from './deploy-struct';
-import { isGithubRef } from './github';
-import { getGithubAuth } from './credentials';
 import { deleteSlice } from './slice-reader';
 import { makeIncluder } from './includer';
 import { getRuntimeForAction, renameActionsToFunctions } from './util';
@@ -240,15 +238,6 @@ export async function runCommand(inputArgs: string[], logger: Logger) {
     incremental,
     json
   };
-  const isGithub = isGithubRef(project);
-  if (incremental && isGithub) {
-    logger.handleError("'--incremental' may not be used with GitHub projects");
-  }
-  if (isGithub && !getGithubAuth()) {
-    logger.handleError(
-      `you don't have GitHub authorization.  Deploy from github not enabled.`
-    );
-  }
   switch (cmd) {
     case 'deploy':
       await doDeploy(project, flags, logger);
@@ -417,7 +406,7 @@ function displayHeader(project: string, creds: Credentials, logger: Logger) {
   if (creds && creds.ow.apihost) {
     hostClause = `\n  on host '${creds.ow.apihost}'`;
   }
-  const projectPath = isGithubRef(project) ? project : path.resolve(project);
+  const projectPath = path.resolve(project);
   logger.log(`Deploying '${projectPath}'${namespaceClause}${hostClause}`);
 }
 
