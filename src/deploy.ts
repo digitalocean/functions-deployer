@@ -88,7 +88,6 @@ export async function doDeploy(
   const skipPkgDeploy =
     todeploy.slice && todeploy.deployerAnnotation.newSliceHandling;
   delete todeploy.deployerAnnotation.newSliceHandling;
-  debug('there are %d packages', todeploy.packages.length);
   const actionPromises = (todeploy.packages || []).map((pkg) =>
     deployPackage(pkg, todeploy, skipPkgDeploy)
   );
