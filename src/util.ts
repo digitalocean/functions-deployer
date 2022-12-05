@@ -458,7 +458,7 @@ async function validatePackageSpec(
   let bindingSeen = false;
   let actionsSeen = false;
   const actionsBindingConflict =
-    'a bound package may not contain actions of its own';
+    'a bound package may not contain functions of its own';
   for (const item in arg) {
     if (!arg[item]) continue;
     if (item === 'name') {
@@ -470,7 +470,7 @@ async function validatePackageSpec(
         return actionsBindingConflict;
       }
       if (!Array.isArray(arg[item])) {
-        return "actions member of a 'package' must be an array";
+        return "functions member of a 'package' must be an array";
       }
       actionsSeen = true;
       for (const subitem of arg[item]) {
@@ -535,7 +535,7 @@ async function validateActionSpec(
       case 'main':
       case 'docker':
         if (!(typeof arg[item] === 'string')) {
-          return `'${item}' member of an 'action' must be a string`;
+          return `'${item}' member of a function must be a string`;
         }
         if (item === 'runtime' && !(await isValidRuntime(arg[item]))) {
           return `'${arg[item]}' is not a valid runtime value`;
@@ -546,7 +546,7 @@ async function validateActionSpec(
       case 'remoteBuild':
       case 'localBuild':
         if (!(typeof arg[item] === 'boolean')) {
-          return `'${item}' member of an 'action' must be a boolean`;
+          return `'${item}' member of a function must be a boolean`;
         }
         break;
       case 'sequence':
@@ -555,12 +555,12 @@ async function validateActionSpec(
           arg[item].length === 0 ||
           typeof arg[item][0] !== 'string'
         ) {
-          return `'${item}' member of an 'action' must be an array of one or more strings naming actions`;
+          return `'${item}' member of a function must be an array of one or more strings naming other functions`;
         }
         break;
       case 'web':
         if (!(typeof arg[item] === 'boolean' || arg[item] === 'raw')) {
-          return `${item} member of an 'action' must be a boolean or the string 'raw'`;
+          return `${item} member of a function must be a boolean or the string 'raw'`;
         }
         break;
       case 'webSecure':
@@ -569,7 +569,7 @@ async function validateActionSpec(
           continue;
         }
         if (!(arg[item] === false || typeof arg[item] === 'string')) {
-          return `'${item}' member of an 'action' must be a boolean false or a string`;
+          return `'${item}' member of a function must be a boolean false or a string`;
         }
         break;
       case 'environment': {
