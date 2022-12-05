@@ -12,6 +12,15 @@ teardown_file() {
   curl -s -u "$AUTH" -X DELETE "$API_HOST/api/v1/namespaces/_/packages/test-package-binding"   
 }
 
+@test "error when functions and binding both specified" {
+  mkdir -p $BATS_TEST_DIRNAME/packages/test-package-binding
+  touch $BATS_TEST_DIRNAME/packages/test-package-binding/ringer.js
+  run $DOSLS deploy $BATS_TEST_DIRNAME
+  assert_failure
+  assert_output -p "may not contain functions"
+  rm -fr $BATS_TEST_DIRNAME/packages
+}
+
 @test "creating a package binding" {
   run $DOSLS deploy $BATS_TEST_DIRNAME
   assert_success
