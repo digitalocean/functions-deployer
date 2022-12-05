@@ -90,7 +90,7 @@ export async function buildAllActions(
   const pkgMap = mapPackages(packages);
   const promises: Promise<PackageSpec>[] = [];
   for (const pkg of packages) {
-    if (pkg.actions && pkg.actions.length > 0) {
+    if ((pkg.actions && pkg.actions.length > 0) || pkg.binding) {
       const builtPackage = buildActionsOfPackage(pkg, spec);
       promises.push(builtPackage);
     }
@@ -130,7 +130,7 @@ async function buildActionsOfPackage(
   // Now run all the builds in this package
   const actionMap = mapActions(pkg.actions);
   let nobuilds = true;
-  for (const action of pkg.actions) {
+  for (const action of pkg.actions || []) {
     if (action.build) {
       nobuilds = false;
       const builtAction = await buildAction(action, spec).catch((err) => {

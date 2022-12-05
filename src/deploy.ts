@@ -88,6 +88,7 @@ export async function doDeploy(
   const skipPkgDeploy =
     todeploy.slice && todeploy.deployerAnnotation.newSliceHandling;
   delete todeploy.deployerAnnotation.newSliceHandling;
+  debug('there are %d packages', todeploy.packages.length);
   const actionPromises = (todeploy.packages || []).map((pkg) =>
     deployPackage(pkg, todeploy, skipPkgDeploy)
   );
@@ -313,13 +314,19 @@ export async function onlyDeployPackage(
       annotations,
       publish: pkg.shared
     };
+    let successes: DeploySuccess[] = [];
+    if (pkg.binding) {
+      owPkg.binding = pkg.binding;
+      successes = [{ name: pkg.name, kind: 'bound package', skipped: false }];
+    }
+    debug('successes: %O', successes);
     return await wsk.packages
       .update({ name: pkg.name, package: owPkg })
       .then((result) => {
         const packageVersions = {};
         packageVersions[pkg.name] = { version: result.version, digest };
         return {
-          successes: [],
+          successes,
           failures: [],
           ignored: [],
           packageVersions,
@@ -333,7 +340,7 @@ export async function onlyDeployPackage(
   }
 }
 
-// Deploy a package, then deploy everything in it (currently just actions)
+// Deploy a package, then deploy everything in it (currently just actions).
 export async function deployPackage(
   pkg: PackageSpec,
   spec: DeployStructure,
@@ -346,17 +353,18 @@ export async function deployPackage(
   } = spec;
   if (
     pkg.name === 'default' &&
-    isAtLeastOneNonEmpty([
-      projectParams,
-      projectEnv,
-      pkg.parameters,
-      pkg.environment,
-      pkg.annotations
-    ])
+    (pkg.binding ||
+      isAtLeastOneNonEmpty([
+        projectParams,
+        projectEnv,
+        pkg.parameters,
+        pkg.environment,
+        pkg.annotations
+      ]))
   ) {
     return wrapError(
       new Error(
-        'The default package does not support attaching environment or parameters'
+        'The default package does not support attaching environment, parameters, or binding'
       ),
       `package 'default'`
     );
@@ -367,7 +375,7 @@ export async function deployPackage(
   const pkgResponse = await onlyDeployPackage(pkg, spec);
   // Now deploy (or skip) the actions of the package
   const actionPromise = await deployActionArray(
-    pkg.actions,
+    pkg.actions || [],
     spec,
     pkg.clean || namespaceIsClean
   );

@@ -28,6 +28,13 @@ export interface PackageSpec {
   clean?: boolean; // Indicates that the package is to be deleted (with its contained actions) before deployment
   web?: any; // like 'web' on an action but affects all actions of the package that don't redeclare the flag
   deployedDuringBuild?: boolean; // set when the package was deployed early because some builds were remote
+  binding?: BindingSpec; // may be present in lieu of an actions array if the package is bound to another
+}
+
+// Describes the binding information for a bound package (with no actions of its own)
+export interface BindingSpec {
+  name: string; // the name of the package to which the present package is bound
+  namespace: string; // the namespace of the package to which the present package is bound
 }
 
 // Describes one action
@@ -158,7 +165,7 @@ export interface VersionMap {
   [key: string]: VersionInfo;
 }
 
-export type DeployKind = 'web' | 'action' | 'trigger';
+export type DeployKind = 'web' | 'action' | 'trigger' | 'bound package';
 
 export interface DeploySuccess {
   name: string;

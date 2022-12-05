@@ -455,6 +455,10 @@ async function validatePackageSpec(
   isNimbella: boolean
 ): Promise<string> {
   const isDefault = arg.name === 'default';
+  let bindingSeen = false;
+  let actionsSeen = false;
+  const actionsBindingConflict =
+    'a bound package may not contain actions of its own';
   for (const item in arg) {
     if (!arg[item]) continue;
     if (item === 'name') {
@@ -462,9 +466,13 @@ async function validatePackageSpec(
         return `'${item}' member of a 'package' must be a string`;
       }
     } else if (item === 'actions') {
+      if (bindingSeen) {
+        return actionsBindingConflict;
+      }
       if (!Array.isArray(arg[item])) {
         return "actions member of a 'package' must be an array";
       }
+      actionsSeen = true;
       for (const subitem of arg[item]) {
         const actionError = await validateActionSpec(subitem, isNimbella);
         if (actionError) {
@@ -492,6 +500,17 @@ async function validatePackageSpec(
       }
       if (isDefault && Object.keys(arg[item]).length > 0) {
         return `'${item}' must be absent or empty for the default package`;
+      }
+    } else if (item === 'binding') {
+      if (actionsSeen) {
+        return actionsBindingConflict;
+      }
+      bindingSeen = true;
+      if (
+        typeof arg[item]?.namespace !== 'string' ||
+        typeof arg[item]?.name != 'string'
+      ) {
+        return 'binding information is incomplete: namespace and package name are both required';
       }
     } else if (item === 'deployedDuringBuild' && slice) {
       continue;
@@ -1221,7 +1240,7 @@ export function mapPackages(packages: PackageSpec[]): PackageMap {
 // Turn an ActionSpec array into an ActionMap
 export function mapActions(actions: ActionSpec[]): ActionMap {
   const ans: ActionMap = {};
-  for (const action of actions) {
+  for (const action of actions || []) {
     ans[action.name] = action;
   }
   return ans;
@@ -1462,6 +1481,7 @@ export function digestPackage(pkg: PackageSpec): string {
   digestDictionary(hash, pkg.annotations);
   digestDictionary(hash, pkg.parameters);
   digestDictionary(hash, pkg.environment);
+  digestDictionary(hash, pkg.binding);
   for (const action of pkg.actions || []) {
     hash.update(action.name);
   }

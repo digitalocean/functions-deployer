@@ -148,6 +148,7 @@ export function deploy(todeploy: DeployStructure): Promise<DeployResponse> {
       if (!results.namespace && todeploy.credentials) {
         results.namespace = todeploy.credentials.namespace;
       }
+      debug('deploy results are: %O', results);
       return results;
     });
 }
