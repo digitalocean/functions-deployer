@@ -496,7 +496,7 @@ async function validatePackageSpec(
     } else if (item === 'binding') {
       // We don't check here for a package with both actions and a binding because we don't have
       // complete information (just parsing the spec, but the package may have actions in the file system
-      // that aren't in the spec).   This conflict is detected later at deploy time. 
+      // that aren't in the spec).   This conflict is detected later at deploy time.
       if (
         typeof arg[item]?.namespace !== 'string' ||
         typeof arg[item]?.name != 'string'
