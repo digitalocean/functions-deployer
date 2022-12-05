@@ -455,10 +455,6 @@ async function validatePackageSpec(
   isNimbella: boolean
 ): Promise<string> {
   const isDefault = arg.name === 'default';
-  let bindingSeen = false;
-  let actionsSeen = false;
-  const actionsBindingConflict =
-    'a bound package may not contain functions of its own';
   for (const item in arg) {
     if (!arg[item]) continue;
     if (item === 'name') {
@@ -466,13 +462,9 @@ async function validatePackageSpec(
         return `'${item}' member of a 'package' must be a string`;
       }
     } else if (item === 'actions') {
-      if (bindingSeen) {
-        return actionsBindingConflict;
-      }
       if (!Array.isArray(arg[item])) {
         return "functions member of a 'package' must be an array";
       }
-      actionsSeen = true;
       for (const subitem of arg[item]) {
         const actionError = await validateActionSpec(subitem, isNimbella);
         if (actionError) {
@@ -502,10 +494,9 @@ async function validatePackageSpec(
         return `'${item}' must be absent or empty for the default package`;
       }
     } else if (item === 'binding') {
-      if (actionsSeen) {
-        return actionsBindingConflict;
-      }
-      bindingSeen = true;
+      // We don't check here for a package with both actions and a binding because we don't have
+      // complete information (just parsing the spec, but the package may have actions in the file system
+      // that aren't in the spec).   This conflict is detected later at deploy time. 
       if (
         typeof arg[item]?.namespace !== 'string' ||
         typeof arg[item]?.name != 'string'

@@ -316,6 +316,9 @@ export async function onlyDeployPackage(
     };
     let successes: DeploySuccess[] = [];
     if (pkg.binding) {
+      if (pkg.actions && pkg.actions.length > 0) {
+        throw new Error('a bound package may not contain functions of its own');
+      }
       owPkg.binding = pkg.binding;
       successes = [{ name: pkg.name, kind: 'bound package', skipped: false }];
     }
