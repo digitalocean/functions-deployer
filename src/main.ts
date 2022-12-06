@@ -474,7 +474,7 @@ function displayResult(
         } else {
           triggers.push(success.name);
         }
-      } else if (success.kind === 'bound package') {
+      } else if (success.kind === 'binding') {
         if (success.skipped) {
           skippedPackages++;
         } else {

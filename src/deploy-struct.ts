@@ -165,7 +165,7 @@ export interface VersionMap {
   [key: string]: VersionInfo;
 }
 
-export type DeployKind = 'web' | 'action' | 'trigger' | 'bound package';
+export type DeployKind = 'web' | 'action' | 'trigger' | 'binding';
 
 export interface DeploySuccess {
   name: string;

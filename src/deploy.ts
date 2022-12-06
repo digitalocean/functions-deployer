@@ -319,7 +319,7 @@ export async function onlyDeployPackage(
         throw new Error('a bound package may not contain functions of its own');
       }
       owPkg.binding = pkg.binding;
-      successes = [{ name: pkg.name, kind: 'bound package', skipped: false }];
+      successes = [{ name: pkg.name, kind: 'binding', skipped: false }];
     }
     debug('successes: %O', successes);
     return await wsk.packages
