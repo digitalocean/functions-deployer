@@ -1,0 +1,9 @@
+parameters: {}
+environment: {}
+packages:
+    - name: test-package-binding
+      binding:
+        namespace: nimbella
+        name: builder
+      parameters:
+        foo: bar

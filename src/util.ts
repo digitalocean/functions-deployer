@@ -463,7 +463,7 @@ async function validatePackageSpec(
       }
     } else if (item === 'actions') {
       if (!Array.isArray(arg[item])) {
-        return "actions member of a 'package' must be an array";
+        return "functions member of a 'package' must be an array";
       }
       for (const subitem of arg[item]) {
         const actionError = await validateActionSpec(subitem, isNimbella);
@@ -493,6 +493,16 @@ async function validatePackageSpec(
       if (isDefault && Object.keys(arg[item]).length > 0) {
         return `'${item}' must be absent or empty for the default package`;
       }
+    } else if (item === 'binding') {
+      // We don't check here for a package with both actions and a binding because we don't have
+      // complete information (just parsing the spec, but the package may have actions in the file system
+      // that aren't in the spec).   This conflict is detected later at deploy time.
+      if (
+        typeof arg[item]?.namespace !== 'string' ||
+        typeof arg[item]?.name != 'string'
+      ) {
+        return 'binding information is incomplete: namespace and package name are both required';
+      }
     } else if (item === 'deployedDuringBuild' && slice) {
       continue;
     } else {
@@ -516,7 +526,7 @@ async function validateActionSpec(
       case 'main':
       case 'docker':
         if (!(typeof arg[item] === 'string')) {
-          return `'${item}' member of an 'action' must be a string`;
+          return `'${item}' member of a function must be a string`;
         }
         if (item === 'runtime' && !(await isValidRuntime(arg[item]))) {
           return `'${arg[item]}' is not a valid runtime value`;
@@ -527,7 +537,7 @@ async function validateActionSpec(
       case 'remoteBuild':
       case 'localBuild':
         if (!(typeof arg[item] === 'boolean')) {
-          return `'${item}' member of an 'action' must be a boolean`;
+          return `'${item}' member of a function must be a boolean`;
         }
         break;
       case 'sequence':
@@ -536,12 +546,12 @@ async function validateActionSpec(
           arg[item].length === 0 ||
           typeof arg[item][0] !== 'string'
         ) {
-          return `'${item}' member of an 'action' must be an array of one or more strings naming actions`;
+          return `'${item}' member of a function must be an array of one or more strings naming other functions`;
         }
         break;
       case 'web':
         if (!(typeof arg[item] === 'boolean' || arg[item] === 'raw')) {
-          return `${item} member of an 'action' must be a boolean or the string 'raw'`;
+          return `${item} member of a function must be a boolean or the string 'raw'`;
         }
         break;
       case 'webSecure':
@@ -550,7 +560,7 @@ async function validateActionSpec(
           continue;
         }
         if (!(arg[item] === false || typeof arg[item] === 'string')) {
-          return `'${item}' member of an 'action' must be a boolean false or a string`;
+          return `'${item}' member of a function must be a boolean false or a string`;
         }
         break;
       case 'environment': {
@@ -1221,7 +1231,7 @@ export function mapPackages(packages: PackageSpec[]): PackageMap {
 // Turn an ActionSpec array into an ActionMap
 export function mapActions(actions: ActionSpec[]): ActionMap {
   const ans: ActionMap = {};
-  for (const action of actions) {
+  for (const action of actions || []) {
     ans[action.name] = action;
   }
   return ans;
@@ -1462,6 +1472,7 @@ export function digestPackage(pkg: PackageSpec): string {
   digestDictionary(hash, pkg.annotations);
   digestDictionary(hash, pkg.parameters);
   digestDictionary(hash, pkg.environment);
+  digestDictionary(hash, pkg.binding);
   for (const action of pkg.actions || []) {
     hash.update(action.name);
   }

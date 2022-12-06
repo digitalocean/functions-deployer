@@ -456,8 +456,10 @@ function displayResult(
     logger.log('');
     const actions: string[] = [];
     const triggers: string[] = [];
+    const packages: string[] = [];
     let skippedActions = 0;
     let skippedTriggers = 0;
+    let skippedPackages = 0;
     for (const success of result.successes) {
       if (success.kind === 'action') {
         if (success.skipped) {
@@ -471,6 +473,12 @@ function displayResult(
           skippedTriggers++;
         } else {
           triggers.push(success.name);
+        }
+      } else if (success.kind === 'binding') {
+        if (success.skipped) {
+          skippedPackages++;
+        } else {
+          packages.push(success.name);
         }
       }
     }
@@ -493,6 +501,15 @@ function displayResult(
     }
     if (skippedTriggers > 0) {
       logger.log(`Skipped ${skippedTriggers} triggers`);
+    }
+    if (packages.length > 0) {
+      logger.log('Deployed bound packages:');
+      for (const pkg of packages) {
+        logger.log(`  - ${pkg}`);
+      }
+    }
+    if (skippedPackages > 0) {
+      logger.log(`Skipped ${skippedPackages} bound packages`);
     }
     if (result.failures.length > 0) {
       success = false;
