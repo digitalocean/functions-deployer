@@ -31,7 +31,8 @@ import {
   getBestProjectName,
   getExclusionList,
   waitForActivation,
-  getActionName
+  getActionName,
+  encryptProjectConfig
 } from './util';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -607,10 +608,8 @@ async function doRemoteActionBuild(
   const spec = makeConfigFromActionSpec(action, project, pkgName);
   debug('converting slice spec to YAML: %O', spec);
 
-  // Uncomment this when support is added in the build container runtime
-  // const { config, key } = encryptProjectConfig(yaml.safeDump(spec))
-  const config = yaml.safeDump(spec);
-  const key = undefined;
+  // Encrypts the configuration file yaml file before uploading it.
+  const { config, key } = encryptProjectConfig(yaml.safeDump(spec));
 
   zip.append(config, { name: 'project.yml' });
   debug('finalizing zip for project slice');
