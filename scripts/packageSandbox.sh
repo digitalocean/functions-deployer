@@ -14,10 +14,12 @@ rm -rf sandbox *.tar.gz digitalocean-functions-deployer-*.tgz
 
 echo "- Building the simple deployer tarball"
 npm install --silent --no-progress
-npm pack &>'/dev/null'
+npm pack & >'/dev/null'
 
 echo "- Moving artifacts to the sandbox folder"
 mkdir sandbox
+pwd
+ls -la
 cp ./_sandbox/package.json ./sandbox/package.json
 cp ./_sandbox/sandbox.js ./sandbox/sandbox.js
 
