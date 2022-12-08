@@ -3,4 +3,4 @@
 // DO NOT EDIT MANUALLY
 ////////////////////////////////////////////////////////////////
 
-export const version = '5.0.17-alpha.6';
+export const version = '5.0.17-alpha.7';
