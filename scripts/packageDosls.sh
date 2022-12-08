@@ -21,7 +21,7 @@ echo "- Ensuring a full install"
 npm install --silent --no-progress
 
 echo "- Building the simple tarball"
-npm pack &>'/dev/null'
+npm pack
 
 echo "- Creating node_modules for the full install"
 mkdir dosls
