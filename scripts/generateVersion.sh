@@ -6,6 +6,5 @@ cat << EOT > src/version.ts
 // DO NOT EDIT MANUALLY
 ////////////////////////////////////////////////////////////////
 
-export const version = "$VERSION"
-
+export const version = '$VERSION';
 EOT

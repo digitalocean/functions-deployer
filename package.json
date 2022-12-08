@@ -86,7 +86,7 @@
     "test": "jest",
     "test:coverage": "jest --coverage",
     "test:e2e": "cd ./e2e && bats -rtT .",
-    "build": "tsc && npm run gen:version && node esbuild.config.js",
+    "build": "npm run gen:version && tsc && node esbuild.config.js",
     "lint": "eslint --ext js,ts src",
     "format": "prettier --write \"./**/*.{js,ts,json}\"",
     "format:check": "./scripts/prettier-check.sh",
