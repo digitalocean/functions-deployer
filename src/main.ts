@@ -27,6 +27,7 @@ import * as path from 'path';
 import { default as parser } from 'yargs-parser';
 import { STATUS_CODES } from 'http';
 import createDebug from 'debug';
+import { version } from './version';
 const verboseError = createDebug('nim:error');
 
 // Provides a limited purpose main function for the deployer
@@ -254,8 +255,7 @@ export async function runCommand(inputArgs: string[], logger: Logger) {
       await doWatch(project, flags, logger);
       break;
     case 'version':
-      
-      logger.log(require('./version').version)
+      logger.log(version);
       break;
     default:
       logger.handleError(`unknown command: ${cmd}`);

@@ -89,7 +89,8 @@
     "build": "tsc && npm run gen:version && node esbuild.config.js",
     "lint": "eslint --ext js,ts src",
     "format": "prettier --write \"./**/*.{js,ts,json}\"",
-    "format:check": "./scripts/prettier-check.sh"
+    "format:check": "./scripts/prettier-check.sh",
+    "postinstall": "husky install"
   },
   "types": "lib/index.d.ts"
 }
