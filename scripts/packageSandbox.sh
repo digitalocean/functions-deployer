@@ -24,6 +24,8 @@ cp ./_sandbox/package.json ./sandbox/package.json
 cp ./_sandbox/sandbox.js ./sandbox/sandbox.js
 
 cd ./sandbox
+pwd
+ls -la
 
 sed -i "" 's/${VERSION}/'$VERSION'/g' package.json
 echo "$VERSION" > version
