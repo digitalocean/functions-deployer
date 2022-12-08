@@ -24,7 +24,7 @@ cp ./_sandbox/sandbox.js ./sandbox/sandbox.js
 cd ./sandbox
 
 sed -i "" 's/${VERSION}/'$VERSION'/g' package.json
-echo "$VERSION" >version
+echo "$VERSION" > version
 
 echo "- Installing production dependencies"
 npm install --production --silent --no-progress
