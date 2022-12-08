@@ -19,5 +19,4 @@ jobs:
     - name: Install dependencies
       run: npm ci
     - name: Check build process
-      shell: bash
       run: npm run build
