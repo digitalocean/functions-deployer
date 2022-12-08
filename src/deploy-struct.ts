@@ -105,6 +105,8 @@ export interface Flags {
   auth: string;
   apiHost: string;
   insecure: boolean;
+  // special flag to reject triggers when found in project.yml (for use in contexts where triggers can't be supported)
+  noTriggers: boolean;
 }
 
 // Object to provide feedback (warnings and progress reports) in real time during execution.
