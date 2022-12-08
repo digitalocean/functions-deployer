@@ -380,7 +380,10 @@ function removeEmptyStringMembersFromPackages(packages: PackageSpec[]) {
 }
 
 // Validation for DeployStructure read from disk.
-export async function validateDeployConfig(arg: any, noTriggers: boolean): Promise<string> {
+export async function validateDeployConfig(
+  arg: any,
+  noTriggers: boolean
+): Promise<string> {
   const isNimbellaDeploy = arg.targetNamespace === 'nimbella';
   const slice = !!arg.slice;
   for (const item in arg) {
@@ -469,7 +472,11 @@ async function validatePackageSpec(
         return "functions member of a 'package' must be an array";
       }
       for (const subitem of arg[item]) {
-        const actionError = await validateActionSpec(subitem, isNimbella, noTriggers);
+        const actionError = await validateActionSpec(
+          subitem,
+          isNimbella,
+          noTriggers
+        );
         if (actionError) {
           return actionError;
         }
@@ -598,7 +605,7 @@ async function validateActionSpec(
       }
       case 'triggers': {
         if (noTriggers) {
-          return `the project requests triggers but triggers are not available`       
+          return `the project requests triggers but triggers are not available`;
         }
         const triggerArs = transformLegacyTriggers(arg[item]);
         const trigErr = validateTriggers(triggerArs);

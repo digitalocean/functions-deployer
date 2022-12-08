@@ -290,7 +290,7 @@ async function doGetMetadata(
   );
   if (result.error && !result.unresolvedVariables) {
     logger.displayError('', result.error);
-    logger.exit(1)
+    logger.exit(1);
   }
 
   // Fill in any missing runtimes

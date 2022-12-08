@@ -162,7 +162,7 @@ export async function readProject(
   includer: Includer,
   requestRemote: boolean,
   feedback: Feedback = new DefaultFeedback(),
-  noTriggers: boolean = false
+  noTriggers = false
 ): Promise<DeployStructure> {
   debug(
     'Starting readProject, projectPath=%s, envPath=%s',
