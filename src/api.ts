@@ -123,7 +123,8 @@ export function readAndPrepare(
     flags.buildEnv,
     includer,
     flags.remoteBuild,
-    feedback
+    feedback,
+    flags.noTriggers
   ).then((spec) =>
     spec.error ? spec : prepareToDeploy(spec, credentials, flags)
   );
@@ -160,7 +161,8 @@ export async function readProject(
   buildEnvPath: string,
   includer: Includer,
   requestRemote: boolean,
-  feedback: Feedback = new DefaultFeedback()
+  feedback: Feedback = new DefaultFeedback(),
+  noTriggers: boolean = false
 ): Promise<DeployStructure> {
   debug(
     'Starting readProject, projectPath=%s, envPath=%s',
@@ -174,7 +176,8 @@ export async function readProject(
       envPath,
       buildEnvPath,
       includer,
-      feedback
+      feedback,
+      noTriggers
     );
     const parts = await buildStructureParts(topLevel);
     ans = assembleInitialStructure(parts);
@@ -206,7 +209,8 @@ export async function readProject(
         envPath,
         buildEnvPath,
         includer,
-        feedback
+        feedback,
+        noTriggers
       );
       const parts = await buildStructureParts(topLevel);
       ans = assembleInitialStructure(parts);

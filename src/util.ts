@@ -77,7 +77,8 @@ export async function loadProjectConfig(
   buildEnvPath: string,
   filePath: string,
   reader: ProjectReader,
-  feedback: Feedback
+  feedback: Feedback,
+  noTriggers: boolean
 ): Promise<DeployStructure> {
   const learnMore =
     '   Learn more about the project configuration file https://docs.digitalocean.com/products/functions/reference/project-configuration/';
@@ -115,7 +116,7 @@ export async function loadProjectConfig(
       // (packages contain actions).
       renameFunctionsToActions(config);
       // Check config
-      const configError = await validateDeployConfig(config);
+      const configError = await validateDeployConfig(config, noTriggers);
       if (configError) {
         throw new Error(configError);
       } else {
@@ -379,7 +380,7 @@ function removeEmptyStringMembersFromPackages(packages: PackageSpec[]) {
 }
 
 // Validation for DeployStructure read from disk.
-export async function validateDeployConfig(arg: any): Promise<string> {
+export async function validateDeployConfig(arg: any, noTriggers: boolean): Promise<string> {
   const isNimbellaDeploy = arg.targetNamespace === 'nimbella';
   const slice = !!arg.slice;
   for (const item in arg) {
@@ -406,7 +407,8 @@ export async function validateDeployConfig(arg: any): Promise<string> {
           const pkgError = await validatePackageSpec(
             subitem,
             slice,
-            isNimbellaDeploy
+            isNimbellaDeploy,
+            noTriggers
           );
           if (pkgError) {
             return pkgError;
@@ -452,7 +454,8 @@ function isValidOwnership(item: any): boolean {
 async function validatePackageSpec(
   arg: Record<string, any>,
   slice: boolean,
-  isNimbella: boolean
+  isNimbella: boolean,
+  noTriggers: boolean
 ): Promise<string> {
   const isDefault = arg.name === 'default';
   for (const item in arg) {
@@ -466,7 +469,7 @@ async function validatePackageSpec(
         return "functions member of a 'package' must be an array";
       }
       for (const subitem of arg[item]) {
-        const actionError = await validateActionSpec(subitem, isNimbella);
+        const actionError = await validateActionSpec(subitem, isNimbella, noTriggers);
         if (actionError) {
           return actionError;
         }
@@ -515,7 +518,8 @@ async function validatePackageSpec(
 // Validator for ActionSpec
 async function validateActionSpec(
   arg: Record<string, any>,
-  isNimbella: boolean
+  isNimbella: boolean,
+  noTriggers: boolean
 ): Promise<string> {
   for (const item in arg) {
     if (!arg[item]) continue;
@@ -593,6 +597,9 @@ async function validateActionSpec(
         break;
       }
       case 'triggers': {
+        if (noTriggers) {
+          return `the project requests triggers but triggers are not available`       
+        }
         const triggerArs = transformLegacyTriggers(arg[item]);
         const trigErr = validateTriggers(triggerArs);
         if (trigErr) {
