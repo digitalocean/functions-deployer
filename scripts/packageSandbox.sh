@@ -26,7 +26,7 @@ cd ./sandbox
 if [[ "$OSTYPE" == "darwin"* ]]; then
   sed -i "" 's/${VERSION}/'$VERSION'/g' package.json
 else 
-    sed -i "" 's/${VERSION}/'$VERSION'/g' package.json
+    sed -i 's/${VERSION}/'$VERSION'/g' package.json
 fi 
 echo "$VERSION" > version
 
