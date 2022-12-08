@@ -1,3 +1,5 @@
+#!/bin/bash
+
 VERSION=$(jq -r .version < package.json)
 
 cat << EOT > src/version.ts
