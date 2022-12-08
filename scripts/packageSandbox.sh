@@ -18,16 +18,16 @@ npm pack & >'/dev/null'
 
 echo "- Moving artifacts to the sandbox folder"
 mkdir sandbox
-pwd
-ls -la
 cp ./_sandbox/package.json ./sandbox/package.json
 cp ./_sandbox/sandbox.js ./sandbox/sandbox.js
 
 cd ./sandbox
-pwd
-ls -la
 
-sed -i "" 's/${VERSION}/'$VERSION'/g' package.json
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  sed -i "" 's/${VERSION}/'$VERSION'/g' package.json
+else 
+    sed -i "" 's/${VERSION}/'$VERSION'/g' package.json
+fi 
 echo "$VERSION" > version
 
 echo "- Installing production dependencies"
