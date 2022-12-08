@@ -53,13 +53,15 @@ interface TopLevel {
   includer: Includer;
   reader: ProjectReader;
   feedback: Feedback;
+  noTriggers: boolean;
 }
 export async function readTopLevel(
   filePath: string,
   env: string,
   buildEnv: string,
   includer: Includer,
-  feedback: Feedback
+  feedback: Feedback,
+  noTriggers: boolean
 ): Promise<TopLevel> {
   debug("readTopLevel with filePath:'%s'", filePath);
   debug('feedback is %O', feedback);
@@ -140,7 +142,8 @@ export async function readTopLevel(
       buildEnv,
       includer,
       reader,
-      feedback
+      feedback,
+      noTriggers
     };
     debug('readTopLevel returning %O', ans);
     return ans;
@@ -162,7 +165,8 @@ export async function buildStructureParts(
     buildEnv,
     includer,
     reader,
-    feedback
+    feedback,
+    noTriggers
   } = topLevel;
   let configPart = await readConfig(
     config,
@@ -171,7 +175,8 @@ export async function buildStructureParts(
     filePath,
     includer,
     reader,
-    feedback
+    feedback,
+    noTriggers
   );
   const deployerAnnotation =
     configPart.deployerAnnotation || (await getDeployerAnnotation(filePath));
@@ -472,7 +477,8 @@ async function readConfig(
   filePath: string,
   includer: Includer,
   reader: ProjectReader,
-  feedback: Feedback
+  feedback: Feedback,
+  noTriggers: boolean
 ): Promise<DeployStructure> {
   if (!configFile) {
     debug('No config file found');
@@ -486,7 +492,8 @@ async function readConfig(
     buildEnvPath,
     filePath,
     reader,
-    feedback
+    feedback,
+    noTriggers
   )
     .then((config) => trimConfigWithIncluder(config, includer))
     .catch((err) => errorStructure(err));

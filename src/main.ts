@@ -179,11 +179,13 @@ const parsing = {
     'yarn',
     'remote-build',
     'incremental',
-    'json'
+    'json',
+    'no-triggers'
   ],
   configuration: {
     'parse-positional-numbers': false,
-    'unknown-options-as-args': true
+    'unknown-options-as-args': true,
+    'boolean-negation': false
   }
 };
 
@@ -221,7 +223,8 @@ export async function runCommand(inputArgs: string[], logger: Logger) {
     yarn,
     remoteBuild,
     incremental,
-    json
+    json,
+    noTriggers
   } = parsed;
   const flags: Flags = {
     env,
@@ -236,7 +239,8 @@ export async function runCommand(inputArgs: string[], logger: Logger) {
     yarn,
     remoteBuild,
     incremental,
-    json
+    json,
+    noTriggers
   };
   switch (cmd) {
     case 'deploy':
@@ -281,10 +285,12 @@ async function doGetMetadata(
     undefined,
     includer,
     false,
-    undefined
+    undefined,
+    flags.noTriggers
   );
   if (result.error && !result.unresolvedVariables) {
-    logger.handleError('  ', result.error);
+    logger.displayError('', result.error);
+    logger.exit(1);
   }
 
   // Fill in any missing runtimes
