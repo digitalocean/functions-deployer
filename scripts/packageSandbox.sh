@@ -18,8 +18,8 @@ npm pack
 
 echo "- Moving artifacts to the sandbox folder"
 mkdir sandbox
-cp ./_sandbox/package.json ./sandbox/package.json
-cp ./_sandbox/sandbox.js ./sandbox/sandbox.js
+cp ./.sandbox/package.json ./sandbox/package.json
+cp ./.sandbox/sandbox.js ./sandbox/sandbox.js
 
 cd ./sandbox
 
