@@ -10,11 +10,11 @@ TARBALL_NAME="$TARBALL_NAME_PREFIX-$VERSION.$TARBALL_NAME_SUFFIX"
 echo "- Building dosls version $VERSION"
 
 echo "- Removing old artifacts"
-rm -rf sandbox *.tar.gz digitalocean-functions-deployer-*.tgz
+rm -rf sandbox *.tar.gz digitalocean-functions-deployer-*.tgz node_modules
 
 echo "- Building the simple deployer tarball"
-npm install --silent --no-progress
-npm pack & >'/dev/null'
+npm install
+npm pack
 
 echo "- Moving artifacts to the sandbox folder"
 mkdir sandbox
@@ -28,10 +28,10 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 else 
     sed -i 's/${VERSION}/'$VERSION'/g' package.json
 fi 
-echo "$VERSION" > version
 
+echo "$VERSION" > version
 echo "- Installing production dependencies"
-npm install --production --silent --no-progress
+npm install --production
 
 cd ..
 echo "- Creating tar file $TARBALL_NAME"
