@@ -62,6 +62,7 @@
     "esbuild-node-externals": "^1.4.1",
     "eslint": "^8.27.0",
     "eslint-config-prettier": "^8.5.0",
+    "husky": "^8.0.2",
     "jest": "^29.2.2",
     "prettier": "^2.7.1",
     "ts-jest": "^29.0.3",
@@ -81,10 +82,11 @@
   ],
   "scripts": {
     "prepack": "npm run build",
+    "gen:version": "./scripts/generateVersion.sh",
     "test": "jest",
     "test:coverage": "jest --coverage",
     "test:e2e": "cd ./e2e && bats -rtT .",
-    "build": "tsc && node esbuild.config.js",
+    "build": "tsc && npm run gen:version && node esbuild.config.js",
     "lint": "eslint --ext js,ts src",
     "format": "prettier --write \"./**/*.{js,ts,json}\"",
     "format:check": "./scripts/prettier-check.sh"

@@ -204,7 +204,7 @@ export async function runCommand(inputArgs: string[], logger: Logger) {
   if (badFlags.length > 0) {
     logger.handleError(`unknown flag(s): [${badFlags}]`);
   }
-  if (args.length != 2) {
+  if (args.length != 2 && args[0] !== 'version') {
     logger.handleError(
       'exactly two non-flag tokens are required: the command, and the project'
     );
@@ -252,6 +252,10 @@ export async function runCommand(inputArgs: string[], logger: Logger) {
     case 'watch':
       // Note: it is up to the caller to use a non-capturing Logger with watch
       await doWatch(project, flags, logger);
+      break;
+    case 'version':
+      
+      logger.log(require('./version').version)
       break;
     default:
       logger.handleError(`unknown command: ${cmd}`);
