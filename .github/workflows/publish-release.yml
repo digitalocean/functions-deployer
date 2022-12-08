@@ -32,8 +32,6 @@ jobs:
       
     - name: Build and upload dosls
       run: ./scripts/packageDosls.sh
-      working-directory: functions-deployer
 
     - name: Build and upload sandbox plugin
       run: ./scripts/packageSandbox.sh
-      working-directory: functions-deployer
