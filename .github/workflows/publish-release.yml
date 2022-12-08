@@ -1,4 +1,4 @@
-name: Publish NPM Package
+name: Publish Packages
 on:
   release:
     types: [published]
@@ -13,7 +13,27 @@ jobs:
       with:
         node-version: '16'
         registry-url: 'https://registry.npmjs.org'
-    - run: npm ci
-    - run: npm publish --access public
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Publish NPM Package
+      run: npm publish --access public
       env:
         NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+    - name: Configure AWS credentials for profile 'do'
+      run: |
+        aws --profile do configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws --profile do configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws --profile do configure set region us-east1
+        aws configure list-profiles
+        aws --profile do configure list   
+      
+    - name: Build and upload dosls
+      run: ./scripts/packageDosls.sh
+      working-directory: functions-deployer
+
+    - name: Build and upload sandbox plugin
+      run: ./scripts/packageSandbox.sh
+      working-directory: functions-deployer
