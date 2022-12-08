@@ -30,8 +30,8 @@ jobs:
         aws configure list-profiles
         aws --profile do configure list   
       
-    - name: Build and upload dosls
-      run: ./scripts/packageDosls.sh
+    # - name: Build and upload dosls
+    #   run: ./scripts/packageDosls.sh
 
     - name: Build and upload sandbox plugin
       run: ./scripts/packageSandbox.sh
