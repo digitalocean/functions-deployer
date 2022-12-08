@@ -1,0 +1,13 @@
+{
+  "name": "sandbox-plugin",
+  "version": "${VERSION}",
+  "description": "Support for doctl serverless commands",
+  "main": "sandbox.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "dependencies": {
+    "@digitalocean/functions-deployer": "file:../digitalocean-functions-deployer-${VERSION}.tgz"
+  }
+}
