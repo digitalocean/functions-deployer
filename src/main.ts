@@ -67,7 +67,7 @@ export class DefaultLogger implements Logger {
     msg = improveErrorMsg(msg, err);
     verboseError('%O', err);
     const bang = process.platform === 'win32' ? '»' : '›';
-    console.log(bang + '   Error: ' + msg);
+    console.error(bang + '   Error: ' + msg);
   }
 
   exit(code: number): void {
