@@ -7,12 +7,12 @@ The _DigitalOcean Functions Deployer_ (hereafter, _the deployer_) has the genera
 - to be present as a plugin to `doctl` to support the `doctl sls [deploy | get-metadata | watch ]` commands
 - to be present in the App Platform functions container image to support both detect and build
 - to be present in every functions runtime to support remote build
-   - for this purpose, there are always two instances of the deployer, one running as a _client_ (the previous two cases), the other running as a _service_.  THe two are connected via functions in the `/nimbella/builder` package.
+   - for this purpose, there are always two instances of the deployer, one running as a _client_ (the previous two cases), the other running as a _service_.  The two are connected via functions in the `/nimbella/builder` package.
 - the deployer is also employed as a library by the UI when creating functions initially via the functions editor
 
 ## Source control
 
-The source to the deployer is OSS in the public github as `digitalocean/functions-deployer`.  Historically, the deployer was OSS as `nimbella/nimbella-deployer`.   The old repo will not be maintained going forward.   The new one was created by copying the old one and it inherits its commit history and tags (but not issues or releases).   The version of the deployer as of the copying was fixed at 5.0.0 (versions less than that are in the old repo).
+The source to the deployer is OSS in the repo containing this document.  Up until recently, we used the deployer from legacy Nimbella, evolved just enough to suit DigitalOcean, and sourced from GitHub `nimbella/nimbella-deployer`.   The old repo will not be maintained going forward.   The new one was created by copying the old one and it inherits its commit history and tags (but not issues or releases).   The version of the deployer as of the copying was fixed at 5.0.0 (versions less than that are in the old repo).  Legacy Nimbella features not used in DigitalOcean have largely been removed.
 
 ## Executables
 
@@ -22,7 +22,7 @@ The deployer currently has two executable embodiments, **dosls** and _the doctl 
 
 The doctl sandbox plugin is added to a `doctl` installation via `doctl sls install` and subsequently managed via `doctl sls upgrade` and `doctl sls uninstall`.   Its artifact name is `doctl-sandbox-${VERSION}.tar.gz`
 
-For details on how it is generated you are referred to the scripts and GitHub actions in the deployer repo.  For details on how `doctl sls install` handles the artifact and its resulting storage in the local file system, you are referred to the `doctl` repo.   
+For details on how it is generated you are referred to the scripts and GitHub actions in this repo.  For details on how `doctl sls install` handles the artifact and its resulting storage in the local file system, you are referred to the `doctl` repo.   
 
 The key thing to know is that there is a constant `minServerlessVersion` in `doctl/do/serverless.go` which guides `doctl` to the correct version of the artifact.   Publishing a new version of the artifact has no effect on `doctl` releases until this constant is changed.
 
@@ -76,7 +76,7 @@ The `DefaultLogger` class implements `Logger` with methods that write to the con
 
 #### The `CaptureLogger` type
 
-The `CaptureLogger` class implements `Logger` with methods that store outputs in instance variables.  It's `handleError` method throws but its `exit` method is a no-op.  It's used by the doctl sandbox plugin for the `deploy` and `get-metadata` commands so that output can be post-processed by `doctl` itsel
+The `CaptureLogger` class implements `Logger` with methods that store outputs in instance variables.  It's `handleError` method throws but its `exit` method is a no-op.  It's used by the doctl sandbox plugin for the `deploy` and `get-metadata` commands so that output can be post-processed by `doctl` itself.
 
 ### Phased Interface
 
@@ -143,8 +143,6 @@ The `LoggerFeedback` implementation simply wraps a `Logger` in a `Feedback` and 
 
 The `prepareToDeploy` function accepts a `DeployStructure`, an optional `Credentials` object, and a required `Flags` object.  The `DeployStructure` also has fields `credentials` and `flags` which are filled in by the end of the phase.  The phase is also responsible for noting the special case of a remote build running in a runtime (`slice==true`) and taking the credentials strictly from the `DeployStructure`.  Otherwise, it processes the low-level credential flags and the contents of the credential store prior to actually opening an OpenWhisk client handle.  A call to the controller is always made, either to find out the namespace associated with the credentials or to validate that the recorded namespace is still the one associated with the crednetials.  The client handle itself is stored in the `DeployStructure`.
 
-_Just noting that the capability we once had, to allow a deploy when only the low level credential flags are provided, may have rotted.  Perhaps we no longer care to support this option._
-
 ##### The `Credentials` type
 
 The `Credentials` type models a set of credentials for a namespace.  At one time, in legacy Nimbella, this set included several kinds of credentials besides OpenWhisk ones (for web deployment, GitHub, Commander, Postman, etc).   Now, the type simply summarizes the OpenWhisk credentials plus the DO API token.  At present, the DO API token is used only to deploy triggers.  Over time, it is expected to be used for more and more of the OpenWhisk CRUD API until, eventually, the OpenWhisk credentials will not need to be stored locally.
@@ -155,7 +153,7 @@ The `Flags` type summarizes the flags that can be specified on the command line,
 
 #### The `buildProject` function
 
-The `buildProject` function takes a `DeployStructure` as input and returns one as output.  It assumes that the `build` and `libBuild` fields were previously filled in, so there is a kind of "plan" for what builds must be run.  However, the actual running of those builds (if local) or the initiation of those builds (if remote) takes place in the scope of this functions.
+The `buildProject` function takes a `DeployStructure` as input and returns one as output.  It assumes that the `build` and `libBuild` fields were previously filled in, so there is a kind of "plan" for what builds must be run.  However, the actual running of those builds (if local) or the initiation of those builds (if remote) takes place in the scope of this function.
 
 The term "building" is a bit overloaded in this context.  Please note the following.
 
@@ -187,3 +185,4 @@ These simply drive the first three or all four phases in succession.
 
 ## Internals
 
+Watch this space.
