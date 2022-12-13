@@ -229,11 +229,19 @@ The reading process is itself divided into sub-phases.
 
 The [`readTopLevel`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/project-reader.ts#L58) function explores the immediate contents of the project directory, finding significant files and recording them in the [`TopLevel`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/project-reader.ts#L45) data structure.  During this sub-phase, if the project path starts with `slice:` the [`fetchSlice`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/slice-reader.ts#L75) function is invoked to move the project into temporary storage in the file system.  More on that in [remote build](#Remote-build).
 
-_To be completed_
+The [`buildStructureParts`]() function expands the `TopLevel` structure into a pair of `DeployStructure` objects (the `actionsPart` and the `configPart`).  The former results from exploring the contents of the `packages` directory in the project.  The latter results from parsing and validating `project.yml` ("the config") and also receives some miscellaneous fields that we want to end up in the final `DeployStructure`.  One of these is the [`DeployerAnnotation`]() which is calculated in this sub-phase.  There is more about that in [Version Management and Incremental Deploy](#Version-Management-and-Incremental-Deploy).
+
+The [`buildActionsPart`]() subroutine and its subroutines are what explores the `packages` directory.  The contents are separated into files and directories.   The files are recorded as "strays" (they will have no affect on the deployment).  The directories are assumed to be packages and the [`readPackage`]() function is used to read its contents.  That function iterates over the contents of one package directory, processing files and directories as potential functions, and checking for duplicates.  For files, the [`actionFileToParts`]() function is used to parse useful information from the file name.  For directories, the [`getBuildForAction`]() is called (logically a part of the building component) to determine the kind of build that will be performed.  In any case, each function is represented by an `ActionSpec` and the entire package is represented by a `PackageSpec`.
+
+The [`readConfig`]() subroutine and its subroutines are what loads and validates `project.yml`.  Part of this process is symbol resolution (via the environment or an environment file) and another part is validation.  These are performed by [`substituteFromEnvAndFiles`]() and [`ValidateDeployConfig`]() respectively.
+
+The pair of `DeployStructure` objects are next merged into a single object by the [`assembleInitialStructure`]() function.  This works via recursive descent using various `merge*` functions.
+
+The final step in project reading involves running the [`checkBuildingRequirements`] function.  This will update the `build` fields of actions with the special values `remote` or `remote-default` indicating so that the building phase will correctly send these actions to be built remotely.
 
 ### Building Details
 
-_To be written_
+At entry to the build phase, the project will have been completely read and the `build` (and `libBuild`) fields will have been filled in.  The primary tasks of this phase are performed by
 
 #### Remote Build
 
