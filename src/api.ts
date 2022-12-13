@@ -191,32 +191,10 @@ export async function readProject(
     return ans;
   }
   debug('evaluating the just-read project: %O', ans);
-  let needsLocalBuilds: boolean;
   try {
-    needsLocalBuilds = await checkBuildingRequirements(ans, requestRemote);
-    debug('needsLocalBuilds=%s', needsLocalBuilds);
+    await checkBuildingRequirements(ans, requestRemote);
   } catch (err) {
     return errorStructure(err);
-  }
-  if (needsLocalBuilds && ans.reader.getFSLocation() === null) {
-    debug(
-      "project '%s' will be re-read and cached because it is covered by a non-file-system reader and needs local building",
-      projectPath
-    );
-    try {
-      const topLevel = await readTopLevel(
-        projectPath,
-        envPath,
-        buildEnvPath,
-        includer,
-        feedback,
-        noTriggers
-      );
-      const parts = await buildStructureParts(topLevel);
-      ans = assembleInitialStructure(parts);
-    } catch (err) {
-      return errorStructure(err);
-    }
   }
   return ans;
 }

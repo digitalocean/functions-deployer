@@ -73,7 +73,7 @@ export function getBuildForAction(
   reader: ProjectReader
 ): Promise<string> {
   return readDirectory(filepath, reader).then((items) =>
-    findSpecialFile(items, filepath, true, false)
+    findSpecialFile(items, filepath, true)
   );
 }
 
@@ -418,17 +418,16 @@ function readFileAsList(
   );
 }
 
-// Determine the build step for the lib or web directory or return undefined if there isn't one
-export function getBuildForLibOrWeb(
+// Determine the build step for the lib directory or return undefined if there isn't one
+export function getBuildForLib(
   filepath: string,
-  reader: ProjectReader,
-  lib: boolean
+  reader: ProjectReader
 ): Promise<string> {
   if (!filepath) {
     return Promise.resolve(undefined);
   }
   return readDirectory(filepath, reader).then((items) =>
-    findSpecialFile(items, filepath, false, lib)
+    findSpecialFile(items, filepath, false)
   );
 }
 
@@ -1004,7 +1003,7 @@ function readDirectory(
   return reader.readdir(filepath).then(filterFiles);
 }
 
-// Find the "dominant" special file in a collection of files within an action, web, or lib directory, while checking for some errors
+// Find the "dominant" special file in a collection of files within an action or lib directory, while checking for some errors
 // The dominance order is build.[sh|cmd] > .build > package.json > .include > none-of-these (returns 'identify' since 'building' will
 //   then start by identifying files)
 // Errors detected are:
@@ -1017,8 +1016,7 @@ function readDirectory(
 function findSpecialFile(
   items: PathKind[],
   filepath: string,
-  isAction: boolean,
-  isLib: boolean
+  isAction: boolean
 ): string {
   const files = items.filter((item) => !item.isDirectory);
   let buildDotSh = false;
@@ -1049,7 +1047,7 @@ function findSpecialFile(
     (files.length === 0 || (ignore && files.length === 1))
   ) {
     throw new Error(`Action directory ${filepath} has no files`);
-  } else if (isLib && (include || ignore)) {
+  } else if (!isAction && (include || ignore)) {
     throw new Error(
       `'.include' and '.ignore' are not supported in the 'lib' directory`
     );

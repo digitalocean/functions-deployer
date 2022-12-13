@@ -31,7 +31,7 @@ import {
   getDeployerAnnotation,
   getBestProjectName
 } from './util';
-import { getBuildForAction, getBuildForLibOrWeb } from './finder-builder';
+import { getBuildForAction, getBuildForLib } from './finder-builder';
 import makeDebug from 'debug';
 import { makeFileReader } from './file-reader';
 import { fetchSlice } from './slice-reader';
@@ -196,7 +196,7 @@ export async function buildStructureParts(
     includer,
     reader
   );
-  configPart.libBuild = await getBuildForLibOrWeb(lib, reader, true);
+  configPart.libBuild = await getBuildForLib(lib, reader);
   return [actionsPart, configPart];
 }
 

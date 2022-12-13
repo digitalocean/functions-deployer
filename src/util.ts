@@ -237,17 +237,13 @@ function locateBuild(
   return buildField;
 }
 
-// Set up the build fields for a project and detect conflicts.  Determine if local building is required.
+// Set up the build fields for a project and detect conflicts.
+// Returns true if any build is required to be local.
 export async function checkBuildingRequirements(
   todeploy: DeployStructure,
   requestRemote: boolean
 ): Promise<boolean> {
-  const checkConflicts = (
-    buildField: string,
-    remote: boolean,
-    local: boolean,
-    tag: string
-  ) => {
+  const checkConflicts = (remote: boolean, local: boolean, tag: string) => {
     if (remote && local) {
       throw new Error(
         `Local and remote building cannot both be required (${tag})`
@@ -259,10 +255,9 @@ export async function checkBuildingRequirements(
       if (pkg.actions) {
         for (const action of pkg.actions) {
           checkConflicts(
-            action.build,
             action.remoteBuild,
             action.localBuild,
-            `action ${action.name}`
+            `function ${action.name}`
           );
         }
       }
