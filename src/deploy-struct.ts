@@ -149,7 +149,7 @@ export interface DeployStructure {
   strays?: string[]; // files or directories found in the project that don't fit the model, not necessarily an error
   filePath?: string; // The location of the project on disk
   owClient?: Client; // The openwhisk client for deploying actions and packages
-  includer?: Includer; // The 'includer' for deciding which packages, actions, web are included in the deploy
+  includer?: Includer; // The 'includer' for deciding which packages and actions are included in the deploy
   reader?: ProjectReader; // The project reader to use
   versions?: VersionEntry; // The VersionEntry for credentials.namespace on the selected API host if available
   feedback?: Feedback; // The object to use for immediate communication to the user (e.g. for warnings and progress reports)
@@ -167,7 +167,7 @@ export interface VersionMap {
   [key: string]: VersionInfo;
 }
 
-export type DeployKind = 'web' | 'action' | 'trigger' | 'binding';
+export type DeployKind = 'action' | 'trigger' | 'binding';
 
 export interface DeploySuccess {
   name: string;
@@ -184,7 +184,6 @@ export interface DeployResponse {
   packageVersions: VersionMap;
   actionVersions: VersionMap;
   apihost?: string;
-  webHashes?: { [key: string]: string };
 }
 
 // The version file entry for a given deployment
@@ -193,7 +192,6 @@ export interface VersionEntry {
   namespace: string;
   packageVersions: VersionMap;
   actionVersions: VersionMap;
-  webHashes: { [key: string]: string };
 }
 
 // The annotation placed in every action and package deployed by the deployer
@@ -275,7 +273,7 @@ export interface CredentialRow {
   apihost: string;
 }
 
-// The Includer object is used during project reading and deployment to screen web, packages, and actions to be included
+// The Includer object is used during project reading and deployment to screen packages, and actions to be included
 export interface Includer {
   isPackageIncluded: (pkg: string, all: boolean) => boolean;
   isActionIncluded: (pkg: string, action: string) => boolean;

@@ -243,12 +243,11 @@ function buildAction(
 async function processInclude(
   includesPath: string,
   dirPath: string,
-  reader: ProjectReader,
-  web: boolean
+  reader: ProjectReader
 ): Promise<string[][]> {
   debug("processing includes from '%s'", includesPath);
   const items = await readFileAsList(includesPath, reader);
-  const errMsg = checkIncludeItems(items, web);
+  const errMsg = checkIncludeItems(items);
   if (errMsg) {
     return Promise.reject(new Error(errMsg));
   }
@@ -340,24 +339,22 @@ async function identifyActionFiles(
   }
   if (await reader.isExistingFile(includesPath)) {
     // If there is .include or .source, it is canonical and all else is ignored
-    return processInclude(includesPath, action.file, reader, false).then(
-      (pairs) => {
-        if (pairs.length === 0) {
-          return Promise.reject(new Error(includesPath + ' is empty'));
-        } else if (pairs.length > 1) {
-          return autozipBuilder(
-            pairs,
-            action,
-            incremental,
-            verboseZip,
-            reader,
-            feedback
-          );
-        } else {
-          return singleFileBuilder(action, pairs[0][0]);
-        }
+    return processInclude(includesPath, action.file, reader).then((pairs) => {
+      if (pairs.length === 0) {
+        return Promise.reject(new Error(includesPath + ' is empty'));
+      } else if (pairs.length > 1) {
+        return autozipBuilder(
+          pairs,
+          action,
+          incremental,
+          verboseZip,
+          reader,
+          feedback
+        );
+      } else {
+        return singleFileBuilder(action, pairs[0][0]);
       }
-    );
+    });
   }
   return getIgnores(action.file, reader).then((ignore) => {
     return promiseFilesAndFilterFiles(action.file, reader).then(
@@ -529,8 +526,8 @@ function checkBuiltLocally(reader: ProjectReader, localPath: string) {
 
 // Check that all include file items resolve to "legal" places (inside the directory being built or a 'lib' directory at project root)
 // Returns an error message if an illegal item is found, else the empty string.
-export function checkIncludeItems(items: string[], web: boolean): string {
-  const legalDots = web ? '../lib' : '../../../lib';
+export function checkIncludeItems(items: string[]): string {
+  const legalDots = '../../../lib';
   for (const item of items) {
     if (!item || item.length === 0) {
       continue;
@@ -549,8 +546,7 @@ export function checkIncludeItems(items: string[], web: boolean): string {
 // a "fail-fast" for remote builds that are going to fail anyway.
 async function checkRemoteBuildPreReqs(
   filepath: string,
-  project: DeployStructure,
-  web: boolean
+  project: DeployStructure
 ) {
   debug(`checking remote build pre-reqs for '${filepath}'`);
   const reader = project.reader;
@@ -560,7 +556,7 @@ async function checkRemoteBuildPreReqs(
       debug(`found an .include file for '${filepath}'`);
       const items = await readFileAsList(include, reader);
       debug(`read ${items.length} .include items for '${filepath}'`);
-      const msg = checkIncludeItems(items, web);
+      const msg = checkIncludeItems(items);
       if (msg) {
         throw new Error(msg);
       }
@@ -574,7 +570,7 @@ async function doRemoteActionBuild(
   project: DeployStructure
 ): Promise<ActionSpec> {
   // Check that a remote build is supportable
-  await checkRemoteBuildPreReqs(action.file, project, false);
+  await checkRemoteBuildPreReqs(action.file, project);
   // Get the zipper
   const { zip, output, outputPromise } = makeProjectSliceZip(action.file);
   // Get the project slice in convenient form
@@ -652,8 +648,8 @@ function defaultRemote(action: ActionSpec): DefaultRemoteBuildInfo {
   return undefined;
 }
 
-// Zip a file or directory for a remote build slice.  For actions, also attempts to determine a runtime.
-// For web builds, the returned 'runtime' is irrelevant and can be ignored.  If the generateBuild argument
+// Zip a file or directory for a remote build slice.  Also attempts to determine a runtime.
+// If the generateBuild argument
 // is defined, it provides the action directory name and indicates that we should add a two-line `build.sh`.
 // This may require changing the single-file case to a multi-file case.
 async function appendToZip(
@@ -729,7 +725,7 @@ async function appendAndCheck(
   zipDebug("zipped '%s' for remote build slice", file);
 }
 
-// Slice the project to contain only one ActionSpec and no web folder; return a DeployStructure that can be written
+// Slice the project to contain only one ActionSpec; return a DeployStructure that can be written
 // out as a project.yml and also the path to the action file or directory, for zipping.
 function makeConfigFromActionSpec(
   action: ActionSpec,
@@ -866,12 +862,8 @@ export function getRemoteBuildName(): string {
 }
 
 // Computes the tag to be added to a remote build slice name.  Should be a function of the
-// qualified action name (pkg/action) but with / replaced by _.  Also, if there is no
-// action spec we assume this is a remote web build and use the string 'web'
+// qualified action name (pkg/action) but with / replaced by _.
 function computeTag(action: ActionSpec): string {
-  if (!action) {
-    return 'web';
-  }
   if (action.package) {
     return `${action.package}_${action.name}`;
   }
@@ -931,12 +923,12 @@ async function getUploadUrl(
   return { url: result.url, sliceName: result.sliceName };
 }
 
-// Invoke the remote builder, return the response.  The 'action' argument is omitted for web builds
+// Invoke the remote builder, return the response.
 async function invokeRemoteBuilder(
   zipped: Buffer,
   owClient: openwhisk.Client,
   feedback: Feedback,
-  action?: ActionSpec,
+  action: ActionSpec,
   encryptionKey?: string
 ): Promise<string> {
   // Upload project slice
@@ -961,11 +953,9 @@ async function invokeRemoteBuilder(
   }
   debug('axios put of url was successful');
   // Invoke the remote builder action.  The action name incorporates the runtime 'kind'.
-  // That action will re-invoke the nim deployer in the target runtime.
-  const kind = action ? action.runtime : 'nodejs:default';
-  const activityName = action
-    ? `action '${getActionName(action)}'`
-    : 'web content';
+  // That action will re-invoke the deployer in the target runtime.
+  const kind = action.runtime;
+  const activityName = `function '${getActionName(action)}'`;
   const runtime = (await canonicalRuntime(kind)).replace(':', '_');
   const buildActionName = `${BUILDER_ACTION_STEM}${runtime}`;
   debug(
@@ -1011,7 +1001,7 @@ function readDirectory(
 //    build.sh but no build.cmd on a windows system
 //    build.cmd but no build.sh on a macos or linux system
 //    .ignore when there is also .include
-//    no files in directory (or only an .ignore file); actions only (web directory is permitted to be empty)
+//    no files in directory (or only an .ignore file); actions only
 //    in a 'lib' directory .include, .ignore, and .build are illegal
 function findSpecialFile(
   items: PathKind[],
@@ -1054,6 +1044,8 @@ function findSpecialFile(
   }
   if (process.platform === 'win32') {
     if (buildDotSh && !buildDotCmd) {
+      // TODO this is erroneous here (issue #39).  It is not known here whether the build is
+      // local or remote.  So, the test for this error should be delayed into the build phase.
       throw new Error(
         `In ${filepath}: 'build.sh' won't run on this platform and no 'build.cmd' is provided`
       );
@@ -1064,6 +1056,8 @@ function findSpecialFile(
   } else {
     // mac or linux
     if (!buildDotSh && buildDotCmd) {
+      // TODO This is ok here because it is an error regardless of whether the build is local or remote.
+      // But probably if the dual test is delayed to a later phase, this should be as well.
       throw new Error(
         `In ${filepath}: 'build.cmd' won't run on this platform and no 'build.sh' is provided`
       );

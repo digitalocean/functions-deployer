@@ -850,10 +850,6 @@ export function combineResponses(responses: DeployResponse[]): DeployResponse {
     (prev, curr) => Object.assign(prev, curr.actionVersions),
     {}
   );
-  const webHashes = responses.reduce(
-    (prev, curr) => Object.assign(prev, curr.webHashes || {}),
-    {}
-  );
   const namespace = responses
     .map((r) => r.namespace)
     .reduce((prev, curr) => prev || curr);
@@ -863,7 +859,6 @@ export function combineResponses(responses: DeployResponse[]): DeployResponse {
     ignored,
     packageVersions,
     actionVersions,
-    webHashes,
     namespace
   };
 }
@@ -1581,12 +1576,10 @@ export function writeProjectStatus(
   replace: boolean
 ): string {
   debug('writing project status with %O', results);
-  const { apihost, namespace, packageVersions, actionVersions, webHashes } =
-    results;
+  const { apihost, namespace, packageVersions, actionVersions } = results;
   if (
     Object.keys(actionVersions).length === 0 &&
-    Object.keys(packageVersions).length === 0 &&
-    Object.keys(webHashes).length === 0
+    Object.keys(packageVersions).length === 0
   ) {
     debug('there is no meaningful project status to write');
     return '';
@@ -1606,8 +1599,7 @@ export function writeProjectStatus(
     apihost,
     namespace,
     packageVersions,
-    actionVersions,
-    webHashes
+    actionVersions
   };
   const oldEntry: VersionEntry = versionList.find(
     (entry) => entry.apihost === apihost && entry.namespace === namespace
@@ -1625,7 +1617,7 @@ export function writeProjectStatus(
 }
 
 // Merge new information into old information within the version store.
-// If replace is specified, each major element of the old entry (packageVersions, actionVersions, webHashes) is replaced
+// If replace is specified, each major element of the old entry (packageVersions, actionVersions) is replaced
 // with the new.  Otherwise, the dictionaries are merged.
 function mergeVersions(
   oldEntry: VersionEntry,
@@ -1637,7 +1629,6 @@ function mergeVersions(
   } else {
     Object.assign(oldEntry.actionVersions, newEntry.actionVersions);
     Object.assign(oldEntry.packageVersions, newEntry.packageVersions);
-    Object.assign(oldEntry.webHashes, newEntry.webHashes);
   }
 }
 
@@ -1660,8 +1651,7 @@ export function loadVersions(
     namespace,
     apihost,
     packageVersions: {},
-    actionVersions: {},
-    webHashes: {}
+    actionVersions: {}
   };
 }
 

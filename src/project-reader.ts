@@ -201,8 +201,7 @@ export async function buildStructureParts(
 }
 
 // Assemble a complete initial structure containing all file system information and config.  May be deployed as is or adjusted
-// before deployment.  Input is the resolved output of buildStructureParts.  At this point, the web part may have names that
-// are only suitable for bucket deploy so we check for that problem here.
+// before deployment.  Input is the resolved output of buildStructureParts.
 export function assembleInitialStructure(
   parts: DeployStructure[]
 ): DeployStructure {
@@ -342,7 +341,7 @@ function buildActionsPart(
       reader
     ).then((values) => {
       const [strays, pkgs] = values;
-      return { web: [], packages: pkgs, strays: strays };
+      return { packages: pkgs, strays: strays };
     });
   }
 }
@@ -501,7 +500,7 @@ async function readConfig(
   return config;
 }
 
-// Given a DeployStructure with web and package sections, trim those sections according to the rules of an Includer
+// Given a DeployStructure with a package section, trim that section according to the rules of an Includer
 function trimConfigWithIncluder(
   config: DeployStructure,
   includer: Includer

@@ -53,7 +53,7 @@ type Exec = openwhisk.Exec & { image?: string };
 // Main deploy logic, excluding that assigned to more specialized files
 //
 
-// The max number of operations to have outstanding at a time (for actions and web resources).
+// The max number of operations to have outstanding at a time (for actions).
 // It isn't obvious how to tune this, but 25 seems to work reliably and 50 sometimes has
 // failures.  I have had success with 40, actually, but don't want to push our luck.
 const DEPLOYMENT_CHUNK_SIZE = parseInt(process.env.DEPLOYMENT_CHUNK_SIZE) || 25;
