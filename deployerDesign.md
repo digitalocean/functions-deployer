@@ -6,9 +6,22 @@ The _DigitalOcean Functions Deployer_ (hereafter, _the deployer_) has the genera
 
 - to be present as a plugin to `doctl` to support the `doctl sls [deploy | get-metadata | watch ]` commands
 - to be present in the App Platform functions container image to support both detect and build
-- to be present in every functions runtime to support remote build
-   - for this purpose, there are always two instances of the deployer, one running as a _client_ (the previous two cases), the other running as a _service_ (in the runtime).  The two are connected via functions in the `/nimbella/builder` package.
+- to be present in every functions runtime to support [remote build](#Remote-Build)
 - the deployer is also employed as a library by the UI when creating functions initially via the functions editor
+
+### Remote Build
+
+Because remote build is an important use case and requires some additional explanation, we elaborate on it here.
+
+In a remote build, there are multiple instances of the deployer running.  The initiating instance (_the client deployer_) is running on a client machine or in an AP container.  It reads the entire project and determines which functions will be built locally and which remotely.  For each function that is to be built remotely, it creates a _project slice_ for that function.  A project slice is a project that contains just one function.  It is always a subset of the original function.  It is initially in the form of a zip "file" in memory.  For each project slice, the client deployer does the following.
+
+1. It invokes an API (currently the system action `/nimbella/builder/getUploadUrl`) to obtain a URL for uploading the slice to a bucket (as a zip object).
+2. It uploads the slice.
+3. It invokes a different API (currently a runtime-specific system action in `/nimbella/builder`) to cause the remote build and deploy steps to complete in a functions runtime.
+
+The builder action just referred to in step (3) will invoke a second instance of the deployer (_the slice deployer_) inside the functions runtime which will be the one to execute the function later.  A special argument form tells the deployer that it is to run as a slice deployer and gives the coordinates where the slice object will be found in the appropriate bucket.  The slice deployer fetches the slice and unzips into the runtime file system, after which it pretty much deploys it as if it were a simple project.
+
+Details of this process will appear in various other sections of this document as appropriate.
 
 ## Source control
 
@@ -62,7 +75,7 @@ Use of this function is not absolutely required but it is recommended so as to s
 
 [**Code**](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/main.ts#L200)
 
-This is the primary entry point to the deployer "commands" (`deploy`, `get-metadata`, `watch`, and `version`).  It accepts an input argument array and a logger object (the latter processes all the textual output from the deployer).  The first argument must be one of the four supported commands and the second argument (except in the case of `version`) must usually be a valid path to a project.  If the first argument is `deploy`, then the second argument may be a string starting with `slice:`, where the balance of the string is interpreted specially and is not a path to project.   This is a special case for use in runtimes and is covered below under [remote build](#Remote-Build).
+This is the primary entry point to the deployer "commands" (`deploy`, `get-metadata`, `watch`, and `version`).  It accepts an input argument array and a logger object (the latter processes all the textual output from the deployer).  The first argument must be one of the four supported commands and the second argument (except in the case of `version`) must usually be a valid path to a project.  If the first argument is `deploy`, then the second argument may be a string starting with `slice:`, where the balance of the string is interpreted specially and is not a path to project.   This is a special case for use in runtimes (as discussed under [remote build](#Remote-Build)).
 
 #### The `Logger` type
 
@@ -121,7 +134,7 @@ The project reading phase result is a `DeployStructure`.  That is also the input
 
 The output of the final ("deploy") phase is a different type from its input and takes the form of a `DeployResponse`.  This structure succinctly summarizes the success and failures that occurred during the deployment.  Successes are only reported when the deploy phase was reached (all earlier phases succeeded).  If any earlier phase returned a `DeployStructure` with the `error` field set, that error will be converted to a degenerate `DeployResponse` reporting that error and no successes.
 
-When the deployer is in a runtime (doing a [remote build](#Remote-build)), the `DeployResponse` is converted to JSON and becomes the output of the remote build function, to be passed back to the client deployer.
+In a slice deployer (doing a [remote build](#Remote-build) inside a runtime), the `DeployResponse` is converted to JSON and becomes the output of the remote build function, to be passed back to the client deployer.
 
 When the deployer is the client deployer, the `DeployResponse` is further processed into the familiar human-readable results of a deployment.
 
@@ -163,7 +176,7 @@ The `LoggerFeedback` implementation simply wraps a `Logger` in a `Feedback` and 
 
 [**Code**](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/api.ts#L252)
 
-The `prepareToDeploy` function accepts a `DeployStructure`, an optional `Credentials` object, and a required `Flags` object.  The `DeployStructure` also has fields `credentials` and `flags` which are filled in by the end of the phase.  The phase is also responsible for noting the special case of a [remote build](#Remote-Build) running in a runtime (`slice==true`) and taking the credentials strictly from the `DeployStructure`.  Otherwise, it processes the low-level credential flags and the contents of the credential store prior to actually opening an OpenWhisk client handle.  A call to the controller is always made, either to find out the namespace associated with the credentials or to validate that the recorded namespace is still the one associated with the crednetials.  The client handle itself is stored in the `DeployStructure`.
+The `prepareToDeploy` function accepts a `DeployStructure`, an optional `Credentials` object, and a required `Flags` object.  The `DeployStructure` also has fields `credentials` and `flags` which are filled in by the end of the phase.  The phase is also responsible for noting the special case of a [remote build](#Remote-Build) running in a runtime (`slice==true`) and taking the credentials strictly from the `DeployStructure`.  Otherwise, it processes the low-level credential flags and the contents of the credential store prior to actually opening an OpenWhisk client handle.  A call to the controller is always made, either to find out the namespace associated with the credentials or to validate that the recorded namespace is still the one associated with the credentials.  The client handle itself is stored in the `DeployStructure`.
 
 ##### The `Credentials` type
 
@@ -229,7 +242,7 @@ The reading process is itself divided into sub-phases.
 
 #### The `readTopLevel` function
 
-The [`readTopLevel`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/project-reader.ts#L58) function explores the immediate contents of the project directory, finding significant files and recording them in the [`TopLevel`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/project-reader.ts#L45) data structure.  During this sub-phase, if the project path starts with `slice:` the [`fetchSlice`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/slice-reader.ts#L75) function is invoked to move the project into temporary storage in the file system.  More on that in [remote build](#Remote-build).
+The [`readTopLevel`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/project-reader.ts#L58) function explores the immediate contents of the project directory, finding significant files and recording them in the [`TopLevel`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/project-reader.ts#L45) data structure.  During this sub-phase, if the project path starts with `slice:` the [`fetchSlice`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/slice-reader.ts#L75) function is invoked to move the project into temporary storage in the file system.  See [remote build](#Remote-build).
 
 #### The `buildStructureParts` function
 
@@ -257,11 +270,23 @@ At entry to the build phase, the project will have been completely read and the 
 
 #### The `maybeBuildLib` function
 
-This function decides whether to build `lib` and dispatches the build if yes.  The `lib` build is 
+This function decides whether to build `lib` and dispatches the build if yes.  The `lib` build is always run, if present, in a slice deployer.   In a client deployer, the `lib` build is run if there are any local builds.  If all builds are remote, then the client deployer omits the `lib` build.
 
-#### Remote Build
+#### The `buildAllActions` function
 
-_To be written_
+This function does a recursive descent through the packages and finds any actions that need building.  There is a short circuit if none are found, since if any are found the entire package array and its dependent action arrays have to be duplicated.
+
+When visiting each package, if any builds in the package will be remote, the package is deployed (once only, in the client deployer).  This is done to avoid the potential collisions that can occur if the package has multiple remote builds and those builds run in parallel in different slice deployers in different runtime containers.  If each slice deployer attempted to deploy the package, errors can occur when duplicate creations hit the controller at the same time (this error plagued large projects deployed via AP until this logic was added).  A package that has been deployed in this way is marked by setting the `deployedDuringBuild` property.
+
+The recursive descent bottoms out in the [`buildAction`]() function.
+
+#### Low level build functions
+
+The process so far described for the build phase is all about locating and driving builds, but how are the builds actually accomplished? j The `buildAction` and `maybeBuildLib` functions dispatch on the contents of the `build` or `libBuild` fields, respectively, and call a series of low level builder functions.
+
+
+
+
 
 ### Deploy-phase details
 
