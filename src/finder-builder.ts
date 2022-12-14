@@ -735,7 +735,6 @@ function makeConfigFromActionSpec(
   debug('converting action spec to sliced project.yml: %O', action);
   const {
     targetNamespace,
-    cleanNamespace,
     parameters,
     environment: globalEnv,
     credentials,
@@ -755,12 +754,10 @@ function makeConfigFromActionSpec(
     webSecure,
     annotations,
     environment,
-    limits,
-    clean
+    limits
   } = action;
   const newSpec = {
     targetNamespace,
-    cleanNamespace,
     parameters,
     environment: globalEnv,
     credentials,
@@ -780,8 +777,7 @@ function makeConfigFromActionSpec(
     annotations,
     parameters: action.parameters,
     environment,
-    limits,
-    clean
+    limits
   } as ActionSpec;
   removeUndefined(newSpec);
   removeUndefined(newAction);

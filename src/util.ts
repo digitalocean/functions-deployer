@@ -386,10 +386,6 @@ export async function validateDeployConfig(
     switch (item) {
       case 'slice':
         continue;
-      case 'cleanNamespace':
-        if (!(typeof arg[item] === 'boolean')) {
-          return `${item} must be a boolean`;
-        }
         break;
       case 'targetNamespace': {
         if (!(typeof arg[item] === 'string') && !isValidOwnership(arg[item])) {
@@ -476,7 +472,7 @@ async function validatePackageSpec(
           return actionError;
         }
       }
-    } else if (item === 'shared' || item === 'clean') {
+    } else if (item === 'shared') {
       if (!(typeof arg[item] === 'boolean')) {
         return `'${item}' member of a 'package' must be a boolean`;
       } else if (isDefault && arg[item]) {
@@ -539,7 +535,6 @@ async function validateActionSpec(
         }
         break;
       case 'binary':
-      case 'clean':
       case 'remoteBuild':
       case 'localBuild':
         if (!(typeof arg[item] === 'boolean')) {
@@ -1471,7 +1466,6 @@ function isProductionProject(
 export function digestPackage(pkg: PackageSpec): string {
   const hash = crypto.createHash('sha256');
   digestBoolean(hash, pkg.shared);
-  digestBoolean(hash, pkg.clean);
   digestBoolean(hash, pkg.web);
   digestDictionary(hash, pkg.annotations);
   digestDictionary(hash, pkg.parameters);
@@ -1522,7 +1516,6 @@ function digestDictionary(hash: crypto.Hash, toDigest: Record<string, any>) {
 // Compute the digest of an ActionSpec.  Code is provided as a separate argument (code member of the ActionSpec will either be identical or undefined)
 export function digestAction(action: ActionSpec, code: string): string {
   const hash = crypto.createHash('sha256');
-  digestBoolean(hash, action.clean);
   digestBoolean(hash, action.binary);
   digestBoolean(hash, action.zipped);
   hash.update(String(action.web));

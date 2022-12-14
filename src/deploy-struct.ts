@@ -25,7 +25,6 @@ export interface PackageSpec {
   annotations?: Dict; // package annotations
   parameters?: Dict; // Bound parameters for all actions in the package, passed in the usual way
   environment?: Dict; // Bound parameters for all actions in the package, destined to go in the environment of each action
-  clean?: boolean; // Indicates that the package is to be deleted (with its contained actions) before deployment
   web?: any; // like 'web' on an action but affects all actions of the package that don't redeclare the flag
   deployedDuringBuild?: boolean; // set when the package was deployed early because some builds were remote
   binding?: BindingSpec; // may be present in lieu of an actions array if the package is bound to another
@@ -58,7 +57,6 @@ export interface ActionSpec {
   parameters?: Dict; // Bound parameters for the action passed in the usual way
   environment?: Dict; // Bound parameters for the action destined to go in the environment
   limits?: Limits; // Action limits (time, memory, logs)
-  clean?: boolean; // Indicates that an old copy of the action should be removed before deployment
   remoteBuild?: boolean; // States that the build (if any) must be done remotely
   localBuild?: boolean; // States that the build (if any) must be done locally
   triggers?: TriggerSpec[]; // Triggers for the function if any
@@ -134,7 +132,6 @@ export class DefaultFeedback implements Feedback {
 export interface DeployStructure {
   packages?: PackageSpec[]; // The packages found in the package directory
   targetNamespace?: string; // The namespace to which we are deploying
-  cleanNamespace?: boolean; // Clears entire namespace prior to deploying
   parameters?: Dict; // Parameters to apply to all packages in the project
   environment?: Dict; // Environment to apply to all packages in the project
   // The following fields are not documented for inclusion project.yml but may be present in a project slice config (remote build)
