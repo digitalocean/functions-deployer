@@ -23,7 +23,6 @@ export {
   buildProject,
   prepareToDeploy,
   wipeNamespace,
-  wipePackage,
   getUserAgent
 } from './api';
 export {

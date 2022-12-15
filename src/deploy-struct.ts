@@ -25,7 +25,6 @@ export interface PackageSpec {
   annotations?: Dict; // package annotations
   parameters?: Dict; // Bound parameters for all actions in the package, passed in the usual way
   environment?: Dict; // Bound parameters for all actions in the package, destined to go in the environment of each action
-  clean?: boolean; // Indicates that the package is to be deleted (with its contained actions) before deployment
   web?: any; // like 'web' on an action but affects all actions of the package that don't redeclare the flag
   deployedDuringBuild?: boolean; // set when the package was deployed early because some builds were remote
   binding?: BindingSpec; // may be present in lieu of an actions array if the package is bound to another
@@ -58,7 +57,6 @@ export interface ActionSpec {
   parameters?: Dict; // Bound parameters for the action passed in the usual way
   environment?: Dict; // Bound parameters for the action destined to go in the environment
   limits?: Limits; // Action limits (time, memory, logs)
-  clean?: boolean; // Indicates that an old copy of the action should be removed before deployment
   remoteBuild?: boolean; // States that the build (if any) must be done remotely
   localBuild?: boolean; // States that the build (if any) must be done locally
   triggers?: TriggerSpec[]; // Triggers for the function if any
@@ -134,7 +132,6 @@ export class DefaultFeedback implements Feedback {
 export interface DeployStructure {
   packages?: PackageSpec[]; // The packages found in the package directory
   targetNamespace?: string; // The namespace to which we are deploying
-  cleanNamespace?: boolean; // Clears entire namespace prior to deploying
   parameters?: Dict; // Parameters to apply to all packages in the project
   environment?: Dict; // Environment to apply to all packages in the project
   // The following fields are not documented for inclusion project.yml but may be present in a project slice config (remote build)
@@ -149,7 +146,7 @@ export interface DeployStructure {
   strays?: string[]; // files or directories found in the project that don't fit the model, not necessarily an error
   filePath?: string; // The location of the project on disk
   owClient?: Client; // The openwhisk client for deploying actions and packages
-  includer?: Includer; // The 'includer' for deciding which packages, actions, web are included in the deploy
+  includer?: Includer; // The 'includer' for deciding which packages and actions are included in the deploy
   reader?: ProjectReader; // The project reader to use
   versions?: VersionEntry; // The VersionEntry for credentials.namespace on the selected API host if available
   feedback?: Feedback; // The object to use for immediate communication to the user (e.g. for warnings and progress reports)
@@ -167,7 +164,7 @@ export interface VersionMap {
   [key: string]: VersionInfo;
 }
 
-export type DeployKind = 'web' | 'action' | 'trigger' | 'binding';
+export type DeployKind = 'action' | 'trigger' | 'binding';
 
 export interface DeploySuccess {
   name: string;
@@ -184,7 +181,6 @@ export interface DeployResponse {
   packageVersions: VersionMap;
   actionVersions: VersionMap;
   apihost?: string;
-  webHashes?: { [key: string]: string };
 }
 
 // The version file entry for a given deployment
@@ -193,7 +189,6 @@ export interface VersionEntry {
   namespace: string;
   packageVersions: VersionMap;
   actionVersions: VersionMap;
-  webHashes: { [key: string]: string };
 }
 
 // The annotation placed in every action and package deployed by the deployer
@@ -275,7 +270,7 @@ export interface CredentialRow {
   apihost: string;
 }
 
-// The Includer object is used during project reading and deployment to screen web, packages, and actions to be included
+// The Includer object is used during project reading and deployment to screen packages, and actions to be included
 export interface Includer {
   isPackageIncluded: (pkg: string, all: boolean) => boolean;
   isActionIncluded: (pkg: string, action: string) => boolean;

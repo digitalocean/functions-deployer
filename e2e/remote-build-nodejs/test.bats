@@ -11,7 +11,7 @@ teardown_file() {
 @test "deploy nodejs projects with remote build" {
   run $DOSLS deploy $BATS_TEST_DIRNAME --remote-build
 	assert_success
-	assert_line -p "Submitted action 'test-remote-build-nodejs/default' for remote building and deployment in runtime nodejs:default"
+	assert_line -p "Submitted function 'test-remote-build-nodejs/default' for remote building and deployment in runtime nodejs:default"
 }
 
 @test "invoke remotely built nodejs lang actions" {

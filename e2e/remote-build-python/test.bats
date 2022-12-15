@@ -11,7 +11,7 @@ teardown_file() {
 @test "deploy python projects with remote build" {
   run $DOSLS deploy $BATS_TEST_DIRNAME --remote-build
 	assert_success
-	assert_line -p "Submitted action 'test-remote-build-python/default' for remote building and deployment in runtime python:default"
+	assert_line -p "Submitted function 'test-remote-build-python/default' for remote building and deployment in runtime python:default"
 }
 
 @test "invoke remotely built python lang actions" {

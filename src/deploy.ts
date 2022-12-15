@@ -16,11 +16,9 @@ import {
   DeployResponse,
   ActionSpec,
   PackageSpec,
-  VersionEntry,
   KeyVal,
   Feedback,
-  DeploySuccess,
-  Credentials
+  DeploySuccess
 } from './deploy-struct';
 import {
   combineResponses,
@@ -30,13 +28,11 @@ import {
   emptyResponse,
   getActionName,
   straysToResponse,
-  wipe,
   makeDict,
   digestPackage,
   digestAction,
   loadVersions,
-  waitForActivation,
-  deleteAction
+  waitForActivation
 } from './util';
 import openwhisk from 'openwhisk';
 import { deployTriggers } from './triggers';
@@ -53,15 +49,13 @@ type Exec = openwhisk.Exec & { image?: string };
 // Main deploy logic, excluding that assigned to more specialized files
 //
 
-// The max number of operations to have outstanding at a time (for actions and web resources).
+// The max number of operations to have outstanding at a time (for actions).
 // It isn't obvious how to tune this, but 25 seems to work reliably and 50 sometimes has
 // failures.  I have had success with 40, actually, but don't want to push our luck.
 const DEPLOYMENT_CHUNK_SIZE = parseInt(process.env.DEPLOYMENT_CHUNK_SIZE) || 25;
 
-// Clean resources as requested unless the 'incremental', 'include' or 'exclude' is specified.
-// For 'incremental', cleaning is skipped entirely.  Otherwise, cleaning is skipped for portions of
-// the project not included in the deployment.  Note: there should always be an Includer by the time we reach here.
-export async function cleanOrLoadVersions(
+// Load the versions if incremental.  If not incremental, the former versions are irrelevant.
+export async function maybeLoadVersions(
   todeploy: DeployStructure
 ): Promise<DeployStructure> {
   if (todeploy.flags.incremental) {
@@ -71,17 +65,11 @@ export async function cleanOrLoadVersions(
       todeploy.credentials.namespace,
       todeploy.credentials.ow.apihost
     );
-  } else {
-    if (todeploy.cleanNamespace && todeploy.includer.isIncludingEverything()) {
-      await wipe(todeploy.owClient, todeploy.credentials);
-    } else {
-      await cleanActionsAndPackages(todeploy);
-    }
   }
   return Promise.resolve(todeploy);
 }
 
-// Do the actual deployment (after testing the target namespace and cleaning)
+// Do the actual deployment
 export async function doDeploy(
   todeploy: DeployStructure
 ): Promise<DeployResponse> {
@@ -151,92 +139,11 @@ async function processRemoteResponse(
   return outcome;
 }
 
-// Look for 'clean' flags in the actions and packages and perform the cleaning.
-function cleanActionsAndPackages(
-  todeploy: DeployStructure
-): Promise<DeployStructure> {
-  if (!todeploy.packages) {
-    return Promise.resolve(todeploy);
-  }
-  const promises: Promise<any>[] = [];
-  for (const pkg of todeploy.packages) {
-    const defaultPkg = pkg.name === 'default';
-    if (
-      pkg.clean &&
-      !defaultPkg &&
-      todeploy.includer.isPackageIncluded(pkg.name, true)
-    ) {
-      // We should have headed off 'clean' of the default package already.  The added test is just in case
-      promises.push(
-        cleanPackage(
-          todeploy.owClient,
-          todeploy.credentials,
-          pkg.name,
-          todeploy.versions
-        )
-      );
-    } else if (pkg.actions) {
-      for (const action of pkg.actions) {
-        if (
-          action.clean &&
-          todeploy.includer.isActionIncluded(pkg.name, action.name) &&
-          !action.buildResult
-        ) {
-          if (todeploy.versions && todeploy.versions.actionVersions) {
-            delete todeploy.versions.actionVersions[action.name];
-          }
-          promises.push(
-            deleteAction(
-              getActionName(action),
-              todeploy.owClient,
-              todeploy.credentials
-            ).catch(() => undefined)
-          );
-        }
-      }
-    }
-  }
-  return Promise.all(promises).then(() => todeploy);
-}
-
-// Clean a package by first deleting its contents then deleting the package itself
-// The 'versions' argument can be undefined, allowing this to be used to delete packages without a project context
-export async function cleanPackage(
-  client: openwhisk.Client,
-  credentials: Credentials,
-  name: string,
-  versions: VersionEntry
-): Promise<openwhisk.Package> {
-  debug('Cleaning package %s', name);
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    const pkg = await client.packages.get({ name }).catch(() => undefined);
-    if (!pkg) {
-      return { name };
-    }
-    if (!pkg.actions || pkg.actions.length === 0) {
-      debug('No more actions, removing package');
-      if (versions && versions.packageVersions) {
-        delete versions.packageVersions[name];
-      }
-      return client.packages.delete({ name });
-    }
-    for (const action of pkg.actions) {
-      debug('deleting action %s', action.name);
-      if (versions && versions.actionVersions) {
-        delete versions.actionVersions[action.name];
-      }
-      await deleteAction(name + '/' + action.name, client, credentials);
-    }
-  }
-}
-
 // Deploy an array of actions of arbitrary size, ensuring that most CHUNK_SIZE operations
 // are pending at the same time.
 async function deployActionArray(
   actions: ActionSpec[],
-  spec: DeployStructure,
-  cleanFlag: boolean
+  spec: DeployStructure
 ): Promise<DeployResponse> {
   let pending = actions;
   const responses: DeployResponse[] = [];
@@ -247,7 +154,7 @@ async function deployActionArray(
         : pending;
     pending = pending.slice(chunk.length);
     const chunkResults = await Promise.all(
-      chunk.map((action) => deployAction(action, spec, cleanFlag))
+      chunk.map((action) => deployAction(action, spec))
     ).then(combineResponses);
     responses.push(chunkResults);
     chunkDebug('Deployed chunk of %d actions', chunk.length);
@@ -265,7 +172,6 @@ export async function onlyDeployPackage(
   const {
     parameters: projectParams,
     environment: projectEnv,
-    cleanNamespace: namespaceIsClean,
     versions,
     owClient: wsk,
     deployerAnnotation: deployer,
@@ -291,12 +197,9 @@ export async function onlyDeployPackage(
       namespace: undefined
     };
   } else {
-    let former: openwhisk.Package;
-    if (!pkg.clean && !namespaceIsClean) {
-      former = await wsk.packages
-        .get({ name: pkg.name })
-        .catch(() => undefined);
-    }
+    const former = await wsk.packages
+      .get({ name: pkg.name })
+      .catch(() => undefined);
     const oldAnnots =
       former && former.annotations ? makeDict(former.annotations) : {};
     delete oldAnnots.deployerAnnot; // remove unwanted legacy from undetected earlier error
@@ -342,17 +245,13 @@ export async function onlyDeployPackage(
   }
 }
 
-// Deploy a package, then deploy everything in it (currently just actions).
+// Deploy a package, then deploy everything in it (currently just actions and triggers associated with those actions).
 export async function deployPackage(
   pkg: PackageSpec,
   spec: DeployStructure,
   skipPkgDeploy: boolean
 ): Promise<DeployResponse> {
-  const {
-    parameters: projectParams,
-    environment: projectEnv,
-    cleanNamespace: namespaceIsClean
-  } = spec;
+  const { parameters: projectParams, environment: projectEnv } = spec;
   if (
     pkg.name === 'default' &&
     (pkg.binding ||
@@ -372,15 +271,11 @@ export async function deployPackage(
     );
   }
   if (pkg.name === 'default' || skipPkgDeploy || pkg.deployedDuringBuild) {
-    return deployActionArray(pkg.actions, spec, namespaceIsClean);
+    return deployActionArray(pkg.actions, spec);
   }
   const pkgResponse = await onlyDeployPackage(pkg, spec);
   // Now deploy (or skip) the actions of the package
-  const actionPromise = await deployActionArray(
-    pkg.actions || [],
-    spec,
-    pkg.clean || namespaceIsClean
-  );
+  const actionPromise = await deployActionArray(pkg.actions || [], spec);
   return combineResponses([actionPromise, pkgResponse]);
 }
 
@@ -398,8 +293,7 @@ function isAtLeastOneNonEmpty(toCheck: object[]): boolean {
 // Deploy an action
 function deployAction(
   action: ActionSpec,
-  spec: DeployStructure,
-  pkgIsClean: boolean
+  spec: DeployStructure
 ): Promise<DeployResponse> {
   const { owClient: wsk, feedback, reader } = spec;
   const context = `action '${getActionName(action)}'`;
@@ -412,13 +306,7 @@ function deployAction(
   }
   if (action.code) {
     debug('action already has code');
-    return deployActionFromCodeOrSequence(
-      action,
-      spec,
-      action.code,
-      undefined,
-      pkgIsClean
-    );
+    return deployActionFromCodeOrSequence(action, spec, action.code, undefined);
   }
   if (action.sequence) {
     const error = checkForLegalSequence(action);
@@ -441,13 +329,7 @@ function deployAction(
         return code;
       })
       .then((code: string) =>
-        deployActionFromCodeOrSequence(
-          action,
-          spec,
-          code,
-          undefined,
-          pkgIsClean
-        )
+        deployActionFromCodeOrSequence(action, spec, code, undefined)
       )
       .catch((err) => Promise.resolve(wrapError(err, context)));
   } else {
@@ -591,26 +473,10 @@ async function deploySequences(
     );
     const exec: openwhisk.Sequence = { kind: 'sequence', components };
     result.push(
-      await deployActionFromCodeOrSequence(
-        seq,
-        todeploy,
-        undefined,
-        exec,
-        isCleanPkg(todeploy, seq.package)
-      )
+      await deployActionFromCodeOrSequence(seq, todeploy, undefined, exec)
     );
   }
   return result;
-}
-
-// Lookup a package in the DeployStructure and answer whether it is cleaned.  If the spec is cleaning
-// the namespace that counts and we return true.
-function isCleanPkg(spec: DeployStructure, pkgName: string): boolean {
-  if (spec.cleanNamespace) {
-    return true;
-  }
-  const pkg = (spec.packages || []).find((pkg) => pkg.name === pkgName);
-  return !!pkg?.clean;
 }
 
 // Compute a fully qualified OW name from an ActionSpec plus a default namespace
@@ -686,8 +552,7 @@ async function deployActionFromCodeOrSequence(
   action: ActionSpec,
   spec: DeployStructure,
   code: string,
-  sequence: openwhisk.Sequence,
-  pkgIsClean: boolean
+  sequence: openwhisk.Sequence
 ): Promise<DeployResponse> {
   const name = getActionName(action);
   const { versions, flags, deployerAnnotation, owClient: wsk } = spec;
@@ -754,11 +619,8 @@ async function deployActionFromCodeOrSequence(
     annotations['require-whisk-auth'] = false;
   }
   // Get the former annotations of the action if any
-  let former: openwhisk.Action;
-  if (!action.clean && !pkgIsClean) {
-    const options = { name, code: false };
-    former = await wsk.actions.get(options).catch(() => undefined);
-  }
+  const options = { name, code: false };
+  const former = await wsk.actions.get(options).catch(() => undefined);
   const oldAnnots =
     former && former.annotations ? makeDict(former.annotations) : {};
   // Merge the annotations

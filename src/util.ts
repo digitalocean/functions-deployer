@@ -237,17 +237,13 @@ function locateBuild(
   return buildField;
 }
 
-// Set up the build fields for a project and detect conflicts.  Determine if local building is required.
+// Set up the build fields for a project and detect conflicts.
+// Returns true if any build is required to be local.
 export async function checkBuildingRequirements(
   todeploy: DeployStructure,
   requestRemote: boolean
 ): Promise<boolean> {
-  const checkConflicts = (
-    buildField: string,
-    remote: boolean,
-    local: boolean,
-    tag: string
-  ) => {
+  const checkConflicts = (remote: boolean, local: boolean, tag: string) => {
     if (remote && local) {
       throw new Error(
         `Local and remote building cannot both be required (${tag})`
@@ -259,10 +255,9 @@ export async function checkBuildingRequirements(
       if (pkg.actions) {
         for (const action of pkg.actions) {
           checkConflicts(
-            action.build,
             action.remoteBuild,
             action.localBuild,
-            `action ${action.name}`
+            `function ${action.name}`
           );
         }
       }
@@ -391,10 +386,6 @@ export async function validateDeployConfig(
     switch (item) {
       case 'slice':
         continue;
-      case 'cleanNamespace':
-        if (!(typeof arg[item] === 'boolean')) {
-          return `${item} must be a boolean`;
-        }
         break;
       case 'targetNamespace': {
         if (!(typeof arg[item] === 'string') && !isValidOwnership(arg[item])) {
@@ -481,7 +472,7 @@ async function validatePackageSpec(
           return actionError;
         }
       }
-    } else if (item === 'shared' || item === 'clean') {
+    } else if (item === 'shared') {
       if (!(typeof arg[item] === 'boolean')) {
         return `'${item}' member of a 'package' must be a boolean`;
       } else if (isDefault && arg[item]) {
@@ -544,7 +535,6 @@ async function validateActionSpec(
         }
         break;
       case 'binary':
-      case 'clean':
       case 'remoteBuild':
       case 'localBuild':
         if (!(typeof arg[item] === 'boolean')) {
@@ -855,10 +845,6 @@ export function combineResponses(responses: DeployResponse[]): DeployResponse {
     (prev, curr) => Object.assign(prev, curr.actionVersions),
     {}
   );
-  const webHashes = responses.reduce(
-    (prev, curr) => Object.assign(prev, curr.webHashes || {}),
-    {}
-  );
   const namespace = responses
     .map((r) => r.namespace)
     .reduce((prev, curr) => prev || curr);
@@ -868,7 +854,6 @@ export function combineResponses(responses: DeployResponse[]): DeployResponse {
     ignored,
     packageVersions,
     actionVersions,
-    webHashes,
     namespace
   };
 }
@@ -1481,7 +1466,6 @@ function isProductionProject(
 export function digestPackage(pkg: PackageSpec): string {
   const hash = crypto.createHash('sha256');
   digestBoolean(hash, pkg.shared);
-  digestBoolean(hash, pkg.clean);
   digestBoolean(hash, pkg.web);
   digestDictionary(hash, pkg.annotations);
   digestDictionary(hash, pkg.parameters);
@@ -1532,7 +1516,6 @@ function digestDictionary(hash: crypto.Hash, toDigest: Record<string, any>) {
 // Compute the digest of an ActionSpec.  Code is provided as a separate argument (code member of the ActionSpec will either be identical or undefined)
 export function digestAction(action: ActionSpec, code: string): string {
   const hash = crypto.createHash('sha256');
-  digestBoolean(hash, action.clean);
   digestBoolean(hash, action.binary);
   digestBoolean(hash, action.zipped);
   hash.update(String(action.web));
@@ -1586,12 +1569,10 @@ export function writeProjectStatus(
   replace: boolean
 ): string {
   debug('writing project status with %O', results);
-  const { apihost, namespace, packageVersions, actionVersions, webHashes } =
-    results;
+  const { apihost, namespace, packageVersions, actionVersions } = results;
   if (
     Object.keys(actionVersions).length === 0 &&
-    Object.keys(packageVersions).length === 0 &&
-    Object.keys(webHashes).length === 0
+    Object.keys(packageVersions).length === 0
   ) {
     debug('there is no meaningful project status to write');
     return '';
@@ -1611,8 +1592,7 @@ export function writeProjectStatus(
     apihost,
     namespace,
     packageVersions,
-    actionVersions,
-    webHashes
+    actionVersions
   };
   const oldEntry: VersionEntry = versionList.find(
     (entry) => entry.apihost === apihost && entry.namespace === namespace
@@ -1630,7 +1610,7 @@ export function writeProjectStatus(
 }
 
 // Merge new information into old information within the version store.
-// If replace is specified, each major element of the old entry (packageVersions, actionVersions, webHashes) is replaced
+// If replace is specified, each major element of the old entry (packageVersions, actionVersions) is replaced
 // with the new.  Otherwise, the dictionaries are merged.
 function mergeVersions(
   oldEntry: VersionEntry,
@@ -1642,7 +1622,6 @@ function mergeVersions(
   } else {
     Object.assign(oldEntry.actionVersions, newEntry.actionVersions);
     Object.assign(oldEntry.packageVersions, newEntry.packageVersions);
-    Object.assign(oldEntry.webHashes, newEntry.webHashes);
   }
 }
 
@@ -1665,8 +1644,7 @@ export function loadVersions(
     namespace,
     apihost,
     packageVersions: {},
-    actionVersions: {},
-    webHashes: {}
+    actionVersions: {}
   };
 }
 

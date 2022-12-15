@@ -13,7 +13,7 @@
 
 // Contains the main public (library) API of the deployer (some exports in 'util' may also be used externally but are incidental)
 
-import { cleanOrLoadVersions, doDeploy, cleanPackage } from './deploy';
+import { doDeploy, maybeLoadVersions } from './deploy';
 import {
   DeployStructure,
   DeployResponse,
@@ -133,7 +133,7 @@ export function readAndPrepare(
 // Perform deployment from a deploy structure.  The 'cleanOrLoadVersions' step is currently folded into this step
 export function deploy(todeploy: DeployStructure): Promise<DeployResponse> {
   debug('Starting deploy');
-  return cleanOrLoadVersions(todeploy)
+  return maybeLoadVersions(todeploy)
     .then(doDeploy)
     .then((results) => {
       const statusDir = writeProjectStatus(
@@ -191,32 +191,10 @@ export async function readProject(
     return ans;
   }
   debug('evaluating the just-read project: %O', ans);
-  let needsLocalBuilds: boolean;
   try {
-    needsLocalBuilds = await checkBuildingRequirements(ans, requestRemote);
-    debug('needsLocalBuilds=%s', needsLocalBuilds);
+    await checkBuildingRequirements(ans, requestRemote);
   } catch (err) {
     return errorStructure(err);
-  }
-  if (needsLocalBuilds && ans.reader.getFSLocation() === null) {
-    debug(
-      "project '%s' will be re-read and cached because it is covered by a non-file-system reader and needs local building",
-      projectPath
-    );
-    try {
-      const topLevel = await readTopLevel(
-        projectPath,
-        envPath,
-        buildEnvPath,
-        includer,
-        feedback,
-        noTriggers
-      );
-      const parts = await buildStructureParts(topLevel);
-      ans = assembleInitialStructure(parts);
-    } catch (err) {
-      return errorStructure(err);
-    }
   }
   return ans;
 }
@@ -366,22 +344,4 @@ export async function wipeNamespace(credentials: Credentials): Promise<void> {
   const client = openwhisk(init);
   debug('Client opened');
   return wipe(client, credentials);
-}
-
-// Completely remove a package including its contained actions
-export async function wipePackage(
-  name: string,
-  host: string,
-  auth: string,
-  credentials: Credentials
-): Promise<openwhisk.Package> {
-  debug(
-    "wipePackage invoked with name='%s', host='%s', auth='%s",
-    name,
-    host,
-    auth
-  );
-  const init: OWOptions = { apihost: host, api_key: auth };
-  const client = openwhisk(init);
-  return cleanPackage(client, credentials, name, undefined);
 }
