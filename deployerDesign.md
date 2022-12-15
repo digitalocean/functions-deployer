@@ -1,4 +1,4 @@
-# DigitalOcean Functions Deployer -- Design Overview
+# DigitalOcean Functions Deployer -- Design Overviews
 
 ## Use Cases
 
@@ -242,19 +242,27 @@ The reading process is itself divided into sub-phases.
 
 #### The `readTopLevel` function
 
-The [`readTopLevel`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/project-reader.ts#L58) function explores the immediate contents of the project directory, finding significant files and recording them in the [`TopLevel`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/project-reader.ts#L45) data structure.  During this sub-phase, if the project path starts with `slice:` the [`fetchSlice`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/slice-reader.ts#L75) function is invoked to move the project into temporary storage in the file system.  See [remote build](#Remote-build).
+[**Code**](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/project-reader.ts#L58)
+
+This function explores the immediate contents of the project directory, finding significant files and recording them in the [`TopLevel`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/project-reader.ts#L45) data structure.  During this sub-phase, if the project path starts with `slice:` the [`fetchSlice`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/slice-reader.ts#L75) function is invoked to move the project into temporary storage in the file system.  See [remote build](#Remote-build).
 
 #### The `buildStructureParts` function
 
-The [`buildStructureParts`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/project-reader.ts#L153) function expands the `TopLevel` structure into a pair of `DeployStructure` objects (the `actionsPart` and the `configPart`).  The former results from exploring the contents of the `packages` directory in the project.  The latter results from parsing and validating `project.yml` ("the config") and also receives some miscellaneous fields that we want to end up in the final `DeployStructure`.  One of these is the [`DeployerAnnotation`]() which is calculated in this sub-phase.  There is more about that in [Version Management and Incremental Deploy](#Version-Management-and-Incremental-Deploy).
+[**Code**](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/project-reader.ts#L153)
+
+This function expands the `TopLevel` structure into a pair of `DeployStructure` objects (the `actionsPart` and the `configPart`).  The former results from exploring the contents of the `packages` directory in the project.  The latter results from parsing and validating `project.yml` ("the config") and also receives some miscellaneous fields that we want to end up in the final `DeployStructure`.  One of these is the [`DeployerAnnotation`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/deploy-struct.ts#L195) which is calculated in this sub-phase.  There is more about that in [Version Management and Incremental Deploy](#Version-Management-and-Incremental-Deploy).
 
 #### The `buildActionsPart` function
 
-The [`buildActionsPart`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/project-reader.ts#L328) subroutine and its subroutines are what explores the `packages` directory.  The contents are separated into files and directories.   The files are recorded as "strays" (they will have no affect on the deployment).  The directories are assumed to be packages and the [`readPackage`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/project-reader.ts#L385) function is used to read its contents.  That function iterates over the contents of one package directory, processing files and directories as potential functions, and checking for duplicates.  For files, the [`actionFileToParts`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/util.ts#L955) function is used to parse useful information from the file name.  For directories, the [`getBuildForAction`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/finder-builder.ts#L71) is called (logically a part of the building component) to determine the kind of build that will be performed.  In any case, each function is represented by an [`ActionSpec`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/deploy-struct.ts#L41) and the entire package is represented by a [`PackageSpec`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/deploy-struct.ts#L21).
+[**Code**](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/project-reader.ts#L328)
+
+This function and its subroutines explore the `packages` directory.  The contents are separated into files and directories.   The files are recorded as "strays" (they will have no affect on the deployment).  The directories are assumed to be packages and the [`readPackage`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/project-reader.ts#L385) function is used to read its contents.  That function iterates over the contents of one package directory, processing files and directories as potential functions, and checking for duplicates.  For files, the [`actionFileToParts`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/util.ts#L955) function is used to parse useful information from the file name.  For directories, the [`getBuildForAction`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/finder-builder.ts#L71) is called (logically a part of the building component) to determine the kind of build that will be performed.  In any case, each function is represented by an [`ActionSpec`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/deploy-struct.ts#L41) and the entire package is represented by a [`PackageSpec`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/deploy-struct.ts#L21).
 
 #### The `readConfig` function
 
-The [`readConfig`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/project-reader.ts#L473) subroutine and its subroutines are what loads and validates `project.yml`.  Part of this process is symbol resolution (via the environment or an environment file) and another part is validation.  These are performed by [`substituteFromEnvAndFiles`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/util.ts#L1086) and [`validateDeployConfig`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/util.ts#L383) respectively.
+[**Code**](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/project-reader.ts#L473)
+
+This function and its subroutines load and validate `project.yml`.  Part of this process is symbol resolution (via the environment or an environment file) and another part is validation.  These are performed by [`substituteFromEnvAndFiles`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/util.ts#L1086) and [`validateDeployConfig`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/util.ts#L383) respectively.
 
 #### The `assembleInitialStructure` function
 
@@ -262,31 +270,82 @@ The pair of `DeployStructure` objects are next merged into a single object by th
 
 #### The `checkBuildingRequirements` function
 
-The final step in project reading involves running the [`checkBuildingRequirements`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/util.ts#L241) function.  This will update the `build` fields of actions with the special values `remote` or `remote-default` indicating so that the building phase will correctly send these actions to be built remotely.
+[**Code**](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/util.ts#L241)
+
+This function is the final step in project reading.  It updates the `build` fields of actions with the special values `remote` or `remote-default` indicating so that the building phase will correctly send these actions to be built remotely.
 
 ### Building Details
 
-At entry to the build phase, the project will have been completely read and the `build` (and `libBuild`) fields will have been filled in.  The primary tasks of this phase are performed by [`maybeBuildLib`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/finder-builder.ts#L440) and [`buildAllActions`](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/finder-builder.ts#L83).
+At entry to the build phase, the project will have been completely read and the `build` (and `libBuild`) fields will have been filled in.  The primary tasks of this phase are performed by `maybeBuildLib` and `buildAllActions`
 
 #### The `maybeBuildLib` function
+
+[**Code**](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/finder-builder.ts#L440)
 
 This function decides whether to build `lib` and dispatches the build if yes.  The `lib` build is always run, if present, in a slice deployer.   In a client deployer, the `lib` build is run if there are any local builds.  If all builds are remote, then the client deployer omits the `lib` build.
 
 #### The `buildAllActions` function
 
+[**Code**](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/finder-builder.ts#L83).
+
 This function does a recursive descent through the packages and finds any actions that need building.  There is a short circuit if none are found, since if any are found the entire package array and its dependent action arrays have to be duplicated.
 
 When visiting each package, if any builds in the package will be remote, the package is deployed (once only, in the client deployer).  This is done to avoid the potential collisions that can occur if the package has multiple remote builds and those builds run in parallel in different slice deployers in different runtime containers.  If each slice deployer attempted to deploy the package, errors can occur when duplicate creations hit the controller at the same time (this error plagued large projects deployed via AP until this logic was added).  A package that has been deployed in this way is marked by setting the `deployedDuringBuild` property.
 
-The recursive descent bottoms out in the [`buildAction`]() function.
+The recursive descent bottoms out in the [`buildAction`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/finder-builder.ts#L151) function.
 
 #### Low level build functions
 
-The process so far described for the build phase is all about locating and driving builds, but how are the builds actually accomplished? j The `buildAction` and `maybeBuildLib` functions dispatch on the contents of the `build` or `libBuild` fields, respectively, and call a series of low level builder functions.
+The process so far described for the build phase is all about locating and driving builds, but how are the builds actually accomplished? The `buildAction` and `maybeBuildLib` functions dispatch on the contents of the `build` or `libBuild` fields, respectively, and call a series of low level builder functions, documented briefly here.
 
+##### The `build` Function
 
+[**Code**](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/finder-builder.ts#L1229)
 
+This function takes care of spawning a subprocess to run a real build.  Both `scriptBuilder` and `npmBuilder` call it.
 
+##### The `scriptBuilder` Function
+
+[**Code**](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/finder-builder.ts#L1295)
+
+This function is called to run user-provided build scripts (`build.sh` and `build.cmd`).  It also handles the `.built` marker file (via the subroutine [`scriptAppearsBuilt`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/finder-builder.ts#L1327), when the incremental option is set.
+
+##### The `npmBuilder` Function
+
+[**Code**](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/finder-builder.ts#L1391)
+
+This function is called to run the `npm` or `yarn` utility if the user provides a `package.json`.  In addition to running the utility, this function determines whether the deploy is incremental and, if so, whether it is valid to skip the build.  The decision is carried out by the subroutines [`npmPackageAppearsBuilt`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/finder-builder.ts#L1358) and [`scriptAppearsBuilt`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/finder-builder.ts#L1327) depending on whether `package.json` specifies a `build` script.
+
+##### The `doRemoteActionBuild` Function
+
+[**Code**](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/finder-builder.ts#L567)
+
+This function is called to initiate a remote build for those functions that call for one.  It builds the project slice as an in-memory zip, and then starts the remote build via the [`invokeRemoteBuilder`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/finder-builder.ts#L923) function.
+
+One subtlety involves _default_ remote builds.  This applies to compile-to-native runtimes (currently, our only one is `go`) where the user has not specified a build script.  In the project reading phase, the special build tag `remote-default` was assigned for this case.  The subroutine [`defaultRemote`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/finder-builder.ts#L641) will generate a build script for inclusion in the project slice in this case.  That script, in turn, calls scripts that are built into the runtime.
+
+##### The `identifyActionFiles` Function
+
+[**Code**](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/finder-builder.ts#L328s)
+
+This function is called directly when the `scriptBuilder` or `npmBuilder` or `doRemoteActionBuild` functions are not applicable (that is, a function expressed as a directory but with no "real" build).  It is also called _after_ the `npmBuilder` or `scriptBuilder` has done its work.  The purpose is to identify the files that are part of the function, using the `.include` and `.ignore` special files.  At the end of this process, with just a single file, the `singleFileBuilder` is called.  Otherwise (more than one file) the `autozipBuilder` is called.
+
+##### The `autozipBuilder` Function
+
+[**Code**](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/finder-builder.ts#L1096)
+
+This function takes the list of files determined by `identifyActionFiles` and creates a zip, which becomes the code object of the function.  It also does some other things.
+
+1. In an incremental deploy, it determines if it can skip zipping by consulting the [`zipFileAppearsCurrent`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/finder-builder.ts#L1338) function.
+2. If the runtime for the function has not yet been determined, it heuristically determines a runtime by using the [`agreeOnRuntime`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/util.ts#L335) function.
+
+When zipping is complete, the `singleFileBuilder` is called to complete the work.
+
+##### The `singleFileBuilder` Function
+
+[**Code**](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/finder-builder.ts#L1069)
+
+This builder is for the case where there is only one file to deploy.  Either, `identifyActionFiles` completed with just a single file, or `autozipBuilder` has run, coalescing all the files to a single zip.  It fills in metadata computed from the single file's name.
 
 ### Deploy-phase details
 
