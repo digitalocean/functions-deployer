@@ -13,13 +13,13 @@ The _DigitalOcean Functions Deployer_ (hereafter, _the deployer_) has the genera
 
 Because remote build is an important use case and requires some additional explanation, we elaborate on it here.
 
-In a remote build, there are multiple instances of the deployer running.  The initiating instance (_the client deployer_) is running on a client machine or in an AP container.  It reads the entire project and determines which functions will be built locally and which remotely.  For each function that is to be built remotely, it creates a _project slice_ for that function.  A project slice is a project that contains just one function.  It is always a subset of the original function.  It is initially in the form of a zip "file" in memory.  For each project slice, the client deployer does the following.
+In a remote build, there are multiple instances of the deployer running.  The initiating instance (_the client deployer_) is running on a client machine or in an AP container.  It reads the entire project and determines which functions will be built locally and which remotely.  For each function that is to be built remotely, it creates a _project slice_ for that function.  A project slice is a project that contains just one function.  The slice is always a subset of the original project.  It is initially in the form of a zip "file" in memory.  For each project slice, the client deployer does the following.
 
 1. It invokes an API (currently the system action `/nimbella/builder/getUploadUrl`) to obtain a URL for uploading the slice to a bucket (as a zip object).
 2. It uploads the slice.
-3. It invokes a different API (currently a runtime-specific system action in `/nimbella/builder`) to cause the remote build and deploy steps to complete in a functions runtime.
+3. It invokes a different API (currently a runtime-specific system action in `/nimbella/builder`) to complete the build and deploy steps remotely for the selected function.
 
-The builder action just referred to in step (3) will invoke a second instance of the deployer (_the slice deployer_) inside the functions runtime which will be the one to execute the function later.  A special argument form tells the deployer that it is to run as a slice deployer and gives the coordinates where the slice object will be found in the appropriate bucket.  The slice deployer fetches the slice and unzips into the runtime file system, after which it pretty much deploys it as if it were a simple project.
+The builder action just referred to in step (3) will invoke a second instance of the deployer (_the slice deployer_) inside the appropriate functions runtime.  The selected runtime is always that which will be used to invoke the function.  A special argument form tells the deployer that it is to run as a slice deployer and gives the coordinates where the slice object will be found in the appropriate bucket.  The slice deployer fetches the slice and unzips into the runtime file system, after which it pretty much deploys it as if it were a simple project.
 
 Details of this process will appear in various other sections of this document as appropriate.
 
@@ -47,19 +47,19 @@ The `dosls` executable is designed for use in the functions runtimes only.  Its 
 
 For details on how `dosls` is installed in runtimes, you are referred to any of the runtime repos (OSS in `nimbella/openwhisk-runtime-[go|nodejs|php|python]`, branch `dev`).
 
-The main motivation for `dosls` is to provide the `deploy` command in a packaging that does not require a DO access token at install time.  The `dosls` packaging is awkward to use in contexts where credentials have to be permanently stored.   The runtimes (as will be elaborated later) do not require this.   In other contexts (client machines, AP containers) the deployer should be used via `doctl` and the doctl sandbox plugin.
+The motivation for `dosls` was to provide the `deploy` command in a packaging that does not require a DO access token at install time.  Otherwise, the `dosls` packaging is awkward to use in contexts where credentials can readily be stored in the local file system.   The runtimes do not employ credentials stored in this fashion.   In other contexts (client machines, AP containers) the deployer should be used via `doctl` and the doctl sandbox plugin.
 
 The original motivation for `dosls` has been superceded by recent changes that support installation without the need for a DO access token:
 
 ```
-DOCKER_SANDBOX_INSTALL=true doctl serverless install`
+DOCKER_SANDBOX_INSTALL=true doctl serverless install
 ```
 
 Thus we could eventually eliminate the `dosls` special case even in the runtimes.  There is no rush to do this though.
 
 ## The Library API
 
-The deployer is published as the `npm` package `@digitalocean/functions-deployer`.   Technically, its externals consist of everything exported by the [`index.ts`](https://github.com/digitalocean/functions-deployer/tree/main/src/index.ts) source file, which is a pretty liberal list, motivated by historical usage that is quite likely not relevant any more.   In this writeup, I will selectively concentrate on parts of the API that are likely to be enduringly useful.   Most of this API is exported by the source files [`main.ts`](https://github.com/digitalocean/functions-deployer/tree/main/src/main.ts) and [`api.ts`](https://github.com/digitalocean/functions-deployer/tree/main/src/api.ts).  Note that `main.ts` also contains a "main program" used by `dosls`.
+The deployer is also published as the `npm` package `@digitalocean/functions-deployer`.   Technically, its externals consist of everything exported by the [`index.ts`](https://github.com/digitalocean/functions-deployer/tree/main/src/index.ts) source file, which is a pretty liberal list, motivated by historical usage that is quite likely not relevant any more.   In this writeup, I will selectively concentrate on parts of the API that are likely to be enduringly useful.   Most of this API is exported by the source files [`main.ts`](https://github.com/digitalocean/functions-deployer/tree/main/src/main.ts) and [`api.ts`](https://github.com/digitalocean/functions-deployer/tree/main/src/api.ts).  Note that `main.ts` also contains a "main program" used by `dosls`.
 
 ### Top-level interface
 
@@ -75,7 +75,9 @@ Use of this function is not absolutely required but it is recommended so as to s
 
 [**Code**](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/main.ts#L200)
 
-This is the primary entry point to the deployer "commands" (`deploy`, `get-metadata`, `watch`, and `version`).  It accepts an input argument array and a logger object (the latter processes all the textual output from the deployer).  The first argument must be one of the four supported commands and the second argument (except in the case of `version`) must usually be a valid path to a project.  If the first argument is `deploy`, then the second argument may be a string starting with `slice:`, where the balance of the string is interpreted specially and is not a path to project.   This is a special case for use in runtimes (as discussed under [remote build](#Remote-Build)).
+This is the primary entry point to the deployer "commands" (`deploy`, `get-metadata`, `watch`, and `version`).  It accepts an input argument array and a logger object (the latter processes all the textual output from the deployer).  The first argument must be one of the four supported commands and the second argument (except in the case of `version`) must usually be a valid path to a project.  
+
+If the first argument is `deploy`, then the second argument _may_ be a string starting with `slice:`, where the balance of the string is interpreted specially and is not a path to project.   This is syntax is reserved for use by a builder action when invoking the deployer as a slice deployer in a runtime (as discussed under [remote build](#Remote-Build)).
 
 #### The `Logger` type
 
@@ -87,7 +89,7 @@ The output handling methods divide into line-oriented output (`log`), simple jSO
 
 The error handling methods divide into simple error display (`displayError`), terminal error handling (`handleError`), and simple process exit (`exit`).  Not all implementations of `exit` actually `exit`.
 
-Below the top-level interface, the deployer is designed not to leak errors, not to exit on its own, and not to write directly to the console.  Furthermore, it does not use the `Logger` (only the top-level API uses it) but rather returns all normal information as part of the result.  Warnings and progress messages that should be displayed earlier are handled by a distinct `Feedback` object defined by lower level APIs.
+Below the top-level interface, the deployer is designed not to leak errors, not to exit on its own, and not to write directly to the console.  Furthermore, it does not use the `Logger` (only the top-level API uses it) but rather returns all normal information as part of the result.  Warnings and progress messages that should be displayed prior to termination are handled by a distinct `Feedback` object defined by lower level APIs.
 
 #### The `DefaultLogger` type
 
@@ -272,7 +274,7 @@ The pair of `DeployStructure` objects are next merged into a single object by th
 
 [**Code**](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/util.ts#L241)
 
-This function is the final step in project reading.  It updates the `build` fields of actions with the special values `remote` or `remote-default` indicating so that the building phase will correctly send these actions to be built remotely.
+This function is the final step in project reading.  It updates the `build` fields of actions with the special values `remote` or `remote-default` indicating that the building phase should send these actions to be built remotely.
 
 ### Building Details
 
@@ -288,9 +290,9 @@ This function decides whether to build `lib` and dispatches the build if yes.  T
 
 [**Code**](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/finder-builder.ts#L83).
 
-This function does a recursive descent through the packages and finds any actions that need building.  There is a short circuit if none are found, since if any are found the entire package array and its dependent action arrays have to be duplicated.
+This function does a recursive descent through the packages and finds any actions that need building.  There is a short circuit if none are found, since if any are found the entire package array and its dependent action arrays have to be reconstructed so that objects remain properly connected.
 
-When visiting each package, if any builds in the package will be remote, the package is deployed (once only, in the client deployer).  This is done to avoid the potential collisions that can occur if the package has multiple remote builds and those builds run in parallel in different slice deployers in different runtime containers.  If each slice deployer attempted to deploy the package, errors can occur when duplicate creations hit the controller at the same time (this error plagued large projects deployed via AP until this logic was added).  A package that has been deployed in this way is marked by setting the `deployedDuringBuild` property.
+When visiting each package, if any builds in the package will be remote, the package is deployed (once only, in the client deployer).  This is done to avoid the potential collisions that can occur if the package has multiple remote builds and those builds run in parallel in different slice deployers in different runtime containers.  If each slice deployer attempted to deploy the package, errors can occur when duplicate creations hit the controller at the same time (this error plagued large projects deployed via AP until this logic was added).  A package that has been deployed in this way is marked by setting the `deployedDuringBuild` property.  This will prevent it from being deployed again.
 
 The recursive descent bottoms out in the [`buildAction`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/finder-builder.ts#L151) function.
 
@@ -349,7 +351,11 @@ This builder is for the case where there is only one file to deploy.  Either, `i
 
 ### Deploy-phase details
 
-_To be written_
+Steps are `maybeLoadVersions` then `doDeploy` then `writeProjectStatus` 
+
+Steps of `doDeploy` are "determine package skipping" then `deployPackage` then `deploySequences` then `combineResponses` .
+
+Steps of `deployPackage` are 
 
 #### Version Management and Incremental Deploy
 
