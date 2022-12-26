@@ -351,13 +351,116 @@ This builder is for the case where there is only one file to deploy.  Either, `i
 
 ### Deploy-phase details
 
-Steps are `maybeLoadVersions` then `doDeploy` then `writeProjectStatus` 
+The deploy phase divides into sub-phases handled by the functions `maybeLoadVersions` then `doDeploy` then `writeProjectStatus`.
 
-Steps of `doDeploy` are "determine package skipping" then `deployPackage` then `deploySequences` then `combineResponses` .
+#### The `maybeLoadVersions` Function
 
-Steps of `deployPackage` are 
+[**Code**](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/deploy.ts#L57)
 
-#### Version Management and Incremental Deploy
+#### The `doDeploy` Function
+
+[**Code**](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/deploy.ts#L72)
+
+The `doDeploy` does the bulk of the work in actually deploying the packages, bindings, functions (which include sequences), and triggers of the project.
+
+The work of this function divides into sub-phases.  
+
+First, the `skipPackageDeploy` variable is set, to suppress deploying packages when running as a slice deployer.  Logically, this flag is unnecessary since the `slice` member of the `DeployStructure` should be its equivalent.  However, when the current package deployment logic was rolled in, it was necessary to tolerate mismatched client and slice deployers (in either direction).  It is probably safe to simplify this logic now.
+
+Next, the `deployPackage` function is called to deploy all the resources in the package except for sequences, if any.  The sequences are noted and deferred.
+
+Next the `deploySequences` function is called on all of the packages of the project to deploy any sequences that were noted in the previous step.  
+
+Finally, `combineResponses` is called to combine the results of the individual `deployPackage` calls and the `deploySequences` call.
+
+#### The `deployPackage` Function
+
+[**Code**](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/deploy.ts#L249)
+
+The steps in this function are
+
+1. Check restrictions on the default package.  This is not a real package and quite a number of things that you can do with a real package are illegal for it.
+2. If deploying the package (as opposed to its contained actions and triggers) is to be skipped, go immediately to `deployActionArray` and return.  The deployment of the package is always skipped in a slice deployer and it is skipped in a client deployer if the package was already deployed during the build step (because remote builds were detected).  There is also no package deployment for the "default" package (not a real package).
+3. Otherwise, deploy the package using the (`onlyDeployPackage`) function.  This is the same function that is called in the build step when remote builds have been identified.  Recall that we do not deploy packages when running as a slice deployer because resource collisions can result as multiple slice deployers run in parallel on the same package (with different actions).  It follows that this step only occurs in a client deployer and only if there are no remote bilds.
+4. The `deployActionArray` function is now called to deploy the contained actions and triggers of the package.
+5. The `combineResponses` function is called to combine the results of everything deployed in the `deployPackage` function.
+
+#### The `deployActionArray` Function
+
+[**Code**](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/deploy.ts#L144)
+
+The main logic of this function concerns the imposition of the `DEPLOYMENT_CHUNK_SIZE` constant.  This constant is set from an (undocumented) environment variable and also has a default.  The logic ensures that no more than this limited number of action deployment promises are left to settle in parallel.  The goal is to avoid flooding the controller with an overly large number of deployment requests.   The actual deployment operation is carried out by the `deployAction` function.
+
+#### The `deployAction` Function
+
+[**Code**](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/deploy.ts#L294)
+
+This is the outer working function for deploying an action (which may be a sequence and may specify triggers).  Its steps are as follows.
+
+1. If there is already a `buildError` recorded in the `ActionSpec`, immediately convert the error into an error-carrying `DeployResponse`.
+2. If there is a `buildResult` (remote build activation id) recorded in the `ActionSpec`, delegate to `processRemoteResponse`.
+3. If the the action is a sequence, check for superficial errors and, if the sequence is nominally legal, defer processing by adding the sequence to the `sequences` field of the `DeployStructure`.  The "result" for this action then becomes the empty response.  Deeper semantic errors are not found until later (in the `deploySequences` function).
+4. Read the code from the file that resulted from the build.  Recall that the build step always ends up with a single file (by zipping if there were originally multiple ones).   The file is base64 encoded if binary.
+5. Delegate the remainder of the processing to the `deployActionFromCodeOrSequence` function.
+
+#### The `processRemoteReponse` Function
+
+[**Code**](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/deploy.ts#L94)
+
+This function takes an activation ID and polls the remote controller for the completion of that activation.  The invoked function was a builder function which initiated a slice deploy.  When the function completes, the remote build and deploy steps have been completed for the action.  The response has two parts, a transcript and an 'outcome' (which is of type `DeployResponse`).  The transcript is fed through the `Feedback.progress` method (which will generally print to the console), approximating what would have happened if the build was local (except for the timing, since nothing prints until the remote action returns).  The 'outcome' then becomes the result of `deployAction`.
+
+#### The `deployActionFromCodeOrSequence` Function
+
+[**Code**](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/deploy.ts#L551)
+
+This function takes care of deploying ordinary actions (with a code body) and also sequences.  It is called with a code body when called from `deployAction` because sequences are not deployed until later.   It is called with a sequence description when called from `deploySequences`.
+
+The logic is as follows.
+
+1. When deploying code (only), calculate the action's digest and, if incremental, determine if it's feasible to skip the deployment.
+2. Calculate the correct annotations for the action.  This consists of the deployer annotation, the annotations derived from the `web` and `webSecure` fields, and any annotations in an already-deployed version of the action if not overwritten by the previous.
+3. Properly encode the OpenWhisk parameters for the action.  In `project.yml`, we distinguish between `parameters` and `environment` but OpenWhisk has only parameters.   Parameters that are to be placed in the enviroment are marked with `init=true`.
+4. Build the `exec` portion of the action request body, differently for sequences versus code.
+5. Deploy the action.
+6. Deploy any triggers associated with the action by calling [`deployTriggers`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/triggers.ts#L33).
+
+#### The `onlyDeployPackage` Function
+
+[**Code**](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/deploy.ts#L168)
+
+This function deploys the package entity (package metadata, not including the contained actions).  OpenWhisk requires that the package entity exists before it will deploy actions belonging to the package.  The deployer takes care of this detail in various ways.
+
+The entity that we refer to as a "binding" is really a package, bound to another package.  It provides its own metadata (typically environment and parameters) but inherits its actions from the package to which it is bound.  This function takes care of that detail as well.
+
+The steps are as follows.
+
+1.  Determine whether the package deployment can be skipped in an incremental deploy
+2.  Get the annotations from the former package.
+3. Merge the old annotations with the new deployer annotations.
+4. Properly encode the OpenWhisk parameters (see discussion under `deployActionFromCodeOrSequence`).
+5. If the package is a binding, check that it contains no actions of its own and set up to include its deployment as a success (assuming the next step succeeds).  Normally, package deployments are not listed under successes but bindings are treated as first-class resources in this context and so they are listed as successes.
+6. Deploy the package and either return the success or an error result.
+
+#### The `combineResponses` Function
+
+[**Code**](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/util.ts#L818)
+
+This utility function is used by several deployer functions that deploy more than one resource.   The general logic elsewhere is to create arrays of promises which are then resolved to an array of `DeployResponse` with `Promise.all`.  The `combineResponses` function then has the responsibility of converting `DeployResponse[]` to `DeployResponse` by coalescing all the individual bits of information that are present in a `DeployResponse`.   The logic is straightforward.
+
+#### The `deploySequences` Function
+
+[**Code**](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/deploy.ts#L461)
+
+This function is responsible for deploying all the sequences in a project, calling `deployActionFromCodeOrSequence` to do that actual deployment.
+
+Several special issues arise when deploying sequences from a project.
+
+1. The project may define sequences whose member actions are deployed in the same project.  We improve the prospects for success by deploying all non-sequence actions before deploying any sequences (see `deployAction` for details).
+2. The members of a sequence may themeselves be sequences.  If they are being deployed in the same project, it is important to order the deployment of sequences so that members are deployed before the sequence containing them.  We accomplish this using the [`sortSequences`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/deploy.ts#L364) subroutine.   The "sorting" is by recursively visiting dependencies and inserting dependencies at the head prior to inserting the encompassing sequence.  
+3. Cycles in the deployment of a sequence are illegal.  In the process of sorting the sequences, we maintain the set of actions whose processing is in progress.  If an in-progress action is encountered again, we have a cycle and an error is indicated.
+4. It should be noted that not all errors are found by the set of practices in this function.  Since it is legal for some of the member actions of sequences to be previously deployed (not deployed as part of the present project), it is not an error for a member action to be missing from the project and we deliberately don't check this.  So, there can be dangling references and even cycles that are not detected by the deployer and result in errors being reflected back by the controller.
+
+### Version Management and Incremental Deploy
 
 _To be written_
 
