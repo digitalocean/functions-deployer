@@ -1,4 +1,4 @@
-# DigitalOcean Functions Deployer -- Design Overviews
+# DigitalOcean Functions Deployer -- Design Overview
 
 ## Use Cases
 
@@ -456,11 +456,46 @@ This function is responsible for deploying all the sequences in a project, calli
 Several special issues arise when deploying sequences from a project.
 
 1. The project may define sequences whose member actions are deployed in the same project.  We improve the prospects for success by deploying all non-sequence actions before deploying any sequences (see `deployAction` for details).
-2. The members of a sequence may themeselves be sequences.  If they are being deployed in the same project, it is important to order the deployment of sequences so that members are deployed before the sequence containing them.  We accomplish this using the [`sortSequences`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/deploy.ts#L364) subroutine.   The "sorting" is by recursively visiting dependencies and inserting dependencies at the head prior to inserting the encompassing sequence.  
+2. The members of a sequence may themeselves be sequences.  If they are being deployed in the same project, it is important to order the deployment of sequences so that members are deployed before the sequence containing them.  We accomplish this using the [`sortSequences`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/deploy.ts#L364) subroutine.   The "sorting" is by recursively visiting dependencies and inserting them prior to inserting the encompassing sequence.  
 3. Cycles in the deployment of a sequence are illegal.  In the process of sorting the sequences, we maintain the set of actions whose processing is in progress.  If an in-progress action is encountered again, we have a cycle and an error is indicated.
 4. It should be noted that not all errors are found by the set of practices in this function.  Since it is legal for some of the member actions of sequences to be previously deployed (not deployed as part of the present project), it is not an error for a member action to be missing from the project and we deliberately don't check this.  So, there can be dangling references and even cycles that are not detected by the deployer and result in errors being reflected back by the controller.
+5. Sequences may refer to actions in other namespaces (these are, of course, definitely outside the project since the project can only deploy to one namespace at a time).  The logic therefore pays attention to whether action names are fully qualified (including the namespace) and converts any namespace-relative names to that form.
 
 ### Version Management and Incremental Deploy
 
-_To be written_
+The deployer has a mechanism for tracking the versions of actions that have been deployed and using that information to guide incremental deploy.  The version information is also generally useful for a quick determination of what has been deployed most recently from a project.
+
+#### Assumptions
+
+Information is recorded both in the local file system and in the deployed actions and packages themselves.  These are not guaranteed to be in sync.  Assuming the developer does not do something idiotic like manually editing the local information, the main risk is local information will become stale due to other updates to the namespace.  These may occur either via the UI or by other CLI developers using competing project definitions or different versions of the project contents.  It is beyond the capacity of the deployer to keep local and remote views completely in sync.  So, the design focuses on making certain assurances in the special case where the following are true.
+
+1. If there are multiple developers, they form a team.
+2. The project is managed by a source repository, which is managed as a team resource.
+3. No updates are made to the shared namespace except via the deployer, working from some clone of the common repository.
+    - For a single developer, this is optional.  Even in a team, each developer can also have a private namespace, which serves as a testing scratchpad and need not be in sync with the shared namespace.
+
+These properties will ensure that some synchronization points can be found, when the namespace contents correspond to a recent commit of the common repository.  Of course, there can also be time lags between updates to the namespace and updates to the repository, and loss of precision due to deploying from a clone with local modifications.
+
+Some of these issues are avoided when using App Platform, since it insists on deploying only what is committed to a repository and has immutable namespaces with versioning and rollback.  A team that choses to use the deployer via `doctl` may be well advised to adopt a similar practice, deploying to its production namespace only via CI jobs that draw strictly from committed source.
+
+The incremental deployment model assumes that the developer has exclusive use of the current namespace, which is presumably not the production namespace.  Thus, it is able to trust the local versioning information and use it to determine the state of the namespace.
+
+#### The `DeployerAnnotation` type
+
+[**Code**](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/deploy-struct.ts#L194)
+
+Information about the most recent deployment is stored in each deployed package, binding, or action by means of a specific annotation with the key `deployer` and a value whose schema is provided by the `DeployerAnnotation` type.  Triggers do not have independent deployer annotations but, in general, we can assume they were last deployed in conjunction with their containing actions.
+
+Fields in this structure are as follows.
+
+- `repository` present if and only if the project is detected to be a git clone; gives the remote repository coordinates
+- `commit` present if and only if the project is detected to be a git clone; gives the latest commit present in the clone, with `++` added if there are uncommitted changes
+- `digest` summarizes the contents of the action or the package metadata
+- `projectPath` the path to the project; this is relative to the git clone root if `repository` and `commit` are provided, otherwise absolute
+- `user` identifies the developer.  This is taken from git metadata if possible, otherwise the operating system
+- `zipped` indicates that the project
+  newSliceHandling?: boolean;
+
+
+During deployment, the `DeployerAnnotation` structure is initialized by the [`getDeployerAnnotation`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/util.ts#L1263) function.
 
