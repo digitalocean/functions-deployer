@@ -252,7 +252,7 @@ This function explores the immediate contents of the project directory, finding 
 
 [**Code**](https://github.com/digitalocean/functions-deployer/blob/9cea0dd06ac7c1e0e8f8091a4d9142329b391107/src/project-reader.ts#L153)
 
-This function expands the `TopLevel` structure into a pair of `DeployStructure` objects (the `actionsPart` and the `configPart`).  The former results from exploring the contents of the `packages` directory in the project.  The latter results from parsing and validating `project.yml` ("the config") and also receives some miscellaneous fields that we want to end up in the final `DeployStructure`.  One of these is the [`DeployerAnnotation`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/deploy-struct.ts#L195) which is calculated in this sub-phase.  There is more about that in [Version Management and Incremental Deploy](#Version-Management-and-Incremental-Deploy).
+This function expands the `TopLevel` structure into a pair of `DeployStructure` objects (the `actionsPart` and the `configPart`).  The former results from exploring the contents of the `packages` directory in the project.  The latter results from parsing and validating `project.yml` ("the config") and also receives some miscellaneous fields that we want to end up in the final `DeployStructure`.  One of these is the [`DeployerAnnotation`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/deploy-struct.ts#L195) which is calculated in this sub-phase.  There is more about that in [Version Management and Incremental Deploy](#Version-management-and-incremental-deploy).
 
 #### The `buildActionsPart` function
 
@@ -351,11 +351,9 @@ This builder is for the case where there is only one file to deploy.  Either, `i
 
 ### Deploy-phase details
 
-The deploy phase divides into sub-phases handled by the functions `maybeLoadVersions` then `doDeploy` then `writeProjectStatus`.
+The deploy phase divides into sub-phases handled by the functions `maybeLoadVersions` then `doDeploy` then `writeProjectStatus`.  
 
-#### The `maybeLoadVersions` Function
-
-[**Code**](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/deploy.ts#L57)
+The [`maybeLoadVersions`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/deploy.ts#L57) and [`writeProjectStatus`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/util.ts#L1559) functions are explained in [Version Management and Incremental Deploy](#Version_Management_and_Incremental_Deploy).
 
 #### The `doDeploy` Function
 
@@ -519,11 +517,31 @@ The `getDeployerAnnotation` function attempts to determine if the project is in 
 
 The digests for actions represent the contents of the action just before deployment (that is, after building).  However, the goal of incremental deployment is to shorten the time taken to deploy, and building can be a significant part of that time.  Also, re-building an action may introduce semantically insignificant changes in the resulting zip file, which will change the digest and cause fresh deployment of the action, even though nothing _really_ has changed.  So, the deployer endeavors to avoid rebuilding actions when it does not seem necessary.
 
-Since builds run user-provided scripts, which are impossible for the deployer to reverse-engineer, the build avoidance logic is necessarily heuristic and we cannot guarantee that unnecessary builds are always avoided, and _not even_ that necessary builds will always occur.   The user always has the option of providing an explicit `build.[sh|cmd]` which will always be run but can use its own dependency tracking to minimize build time and avoid rebuilding deployable artifacts when that is not necessary.  Here I merely describe what the current heuristics do.
+We can distinguish three cases: 
 
-For `package.json` builds, the heuristic is contained in the [`npmPackageAppearsBuilt`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/finder-builder.ts#L1358) and [`scriptAppearsBuilt`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/finder-builder.ts#L1327) function.  It relies on comparing last modification times for the `node_modules` directory and the lock file to the last modification time for `package.json` itself.  Note that it does not do a complete dependency check, so changes to files other than `package.json` will not necessarily trigger a new build.  Note that the user always has the option to run non-incremental builds periodically and may be well advised to do so in cases where the heuristic is inadequate.
+1. "builds" that use only the `autozipBuilder`
+2. "real builds" which run only `npm` (no actual building, just dependency installation)
+3. "real builds" which either run a script directly or indirectly because `package.json` contains a `build` script.
 
-For scripted builds, the heuristic employs a special indicator file called `.built`.  A script can write and/or delete this indicator file to achieve rough control over whether or not the build runs.
+##### Autozip only
 
-A `package.json` build that contains an explicit `build` script is actually subject to both of the above checks.
+When there is only autozipping to consider, we make the process easier by not deleting the zip (`__deployer__.zip`) at the end of deployment.  We can then compare file dates for that file with the file dates for all the files that are supposed to be included in it.  This is done in the [`zipFileAppearsCurrent`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/finder-builder.ts#L1335) function.  If no included files are newer than the last-generated zip, the zip can be reused.
+
+##### Npm for dependencies only.
+
+A real build that runs only `npm` (no actual build script), can use a reasonable heuristic and achieve an accurate-enough result most of the time.
+
+That heuristic is contained in the [`npmPackageAppearsBuilt`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/finder-builder.ts#L1358) function.  It relies on comparing last modification times for the `node_modules` directory and the lock file to the last modification time for `package.json` itself.  The idea is that a real change to dependencies will involve a change to `package.json`, so that can be used to trigger an `npm` run.
+
+Since the `autozipBuilder` will always run after the `npmBuilder`, a change to a real source file (not a dependency) will trigger a new zip and a new deploy even though the dependencies did not change.
+
+##### Scripted builds
+
+A user-provided build script can do anything and the deployer cannot reverse-engineer these scripts in order to figure out dependencies.  So, for this case we provide a very blunt instrument and also encourage users to do their own dependency management in the script itself.
+
+The blunt instrument consists of the special indicator file called `.built`.  The contents are irrelevant.  A script can write and/or delete this indicator file to achieve rough control over whether or not the build runs the next time around.
+
+A much better solution is to just let scripts run all the time but encourage developers to write them so that they are sensitive to dependencies and only rebuild what really needs to be rebuilt.  The artifacts resulting from this build will themselves be subject to the logic of `zipFileAppearsCurrent`.  Thus, if the build did not change these artifacts, then no re-zipping or deployment will occur.
+
+A `package.json` build that contains an explicit `build` script is subject to both checks (`npmPackageAppearsBuilt` and the `.built` indicator).  It will only be skipped if both are true.  So, if there is never any `.built` indicator set, then both `npm` and the contained script will run.  In that case, we are relying on `npm` to minimize its work when the dependencies haven't changed.
 
