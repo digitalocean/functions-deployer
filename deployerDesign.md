@@ -465,20 +465,35 @@ Several special issues arise when deploying sequences from a project.
 
 The deployer has a mechanism for tracking the versions of actions that have been deployed and using that information to guide incremental deploy.  The version information is also generally useful for a quick determination of what has been deployed most recently from a project.
 
+Information is recorded both in the local file system and in the deployed actions and packages themselves.  Immediately after a deployment operation these are in sync, but independent changes to the namespace are possible, causing the locally recorded information to become stale.  Thus, it is necessary to make some assumptions about independent changes.
+
 #### Assumptions
 
-Information is recorded both in the local file system and in the deployed actions and packages themselves.  These are not guaranteed to be in sync.  Assuming the developer does not do something idiotic like manually editing the local information, the main risk is local information will become stale due to other updates to the namespace.  These may occur either via the UI or by other CLI developers using competing project definitions or different versions of the project contents.  It is beyond the capacity of the deployer to keep local and remote views completely in sync.  So, the design focuses on making certain assurances in the special case where the following are true.
+1. Even the remote information can be suspect if changes are made via the UI, since those changes do not necessarily update the information recorded by the deployer.  Thus, we assume in this section that only the deployer is changing the remote content.
 
-1. If there are multiple developers, they form a team.
-2. The project is managed by a source repository, which is managed as a team resource.
-3. No updates are made to the shared namespace except via the deployer, working from some clone of the common repository.
-    - For a single developer, this is optional.  Even in a team, each developer can also have a private namespace, which serves as a testing scratchpad and need not be in sync with the shared namespace.
+2.  During a period when a developer is deploying incrementally, that developer has exclusive use of the target namespace (nothing else is changing it, not even another deployer instance).  Assigning individual namespaces to developers helps in maintaining this assumption.
 
-These properties will ensure that some synchronization points can be found, when the namespace contents correspond to a recent commit of the common repository.  Of course, there can also be time lags between updates to the namespace and updates to the repository, and loss of precision due to deploying from a clone with local modifications.
+Note that when production namespaces are managed by App Platform, the namespace is immutable after deployment and always corresponds to a commit of a repository.  When using `doctl sls` to deploy production namespaces, the same desireable invariant should be maintained.  Production namespaces should be deployed after the repository is committed, using an automated process.
 
-Some of these issues are avoided when using App Platform, since it insists on deploying only what is committed to a repository and has immutable namespaces with versioning and rollback.  A team that choses to use the deployer via `doctl` may be well advised to adopt a similar practice, deploying to its production namespace only via CI jobs that draw strictly from committed source.
+It is possible to detect when the local and remote information does not match, but the deployer does not perform this check.  Rather, it uses local information exclusively to guide incremental deployment and writes new remote information to each deployed entity at deployment time.
 
-The incremental deployment model assumes that the developer has exclusive use of the current namespace, which is presumably not the production namespace.  Thus, it is able to trust the local versioning information and use it to determine the state of the namespace.
+#### Digests
+
+The deployer uses digests to determine whether a package or action has changed.  There are two kinds of digests.
+
+_Action digests_ summarize the current contents of an action (code and metadata).  They are computed by the [`digestAction`]() function.
+
+_Package digests_ summarize the current contents of a package (metadata and the set of contained actions but not the details of those actions).  They are computed by the [`digestPackage`]() function.
+
+In an incremental deploy, if a freshly calculated action digest matches the action digest from the last deploy (as recorded locally), then the action is not deployed.  If a fresh package digest matches the last locally recorded package digest, then the package is not deployed.  Note that package digests do not change when their contained actions change, only when the package metadata changes or the repertoire of contained actions changes (additions or deletions).  _As of this writing, I do not understand why a package would need to be redeployed when simply adding actions; the motivation is lost in history._
+
+#### Local Recording
+
+Information about the most recent deployments of a project are kept in `.deployed/versions.json` at the root of the project.  The contents are a JSON array, with one entry for each combination of API host and namespace to which the the project has been deployed.  Each entry (of type [`VersionEntry`]()) contains `packageVersions` and `actionVersions` members, with each such member being a map from the name of the package or action, respectively, to a [`VersionInfo`]() structure.
+
+A `VersionInfo` contains two items: the `version` of the action or package as reported back from the most recent deployment operation, and the `digest` for that action and package.
+
+The version information is written at the end of deployment in function [`writeProjectStatus`]().  It is only re-read when a deployment is incremental.  In that case, it is loaded in the [`loadVersions`]() function and stored in the `versions` field of the `DeployStructure` for use during deployment.   The function [`maybeLoadVersions`]() decides whether to load versions.
 
 #### The `DeployerAnnotation` type
 
@@ -493,9 +508,22 @@ Fields in this structure are as follows.
 - `digest` summarizes the contents of the action or the package metadata
 - `projectPath` the path to the project; this is relative to the git clone root if `repository` and `commit` are provided, otherwise absolute
 - `user` identifies the developer.  This is taken from git metadata if possible, otherwise the operating system
-- `zipped` indicates that the project
-  newSliceHandling?: boolean;
+- `zipped` indicates that the project's binary artifact was identified during the build phase as a zip file.  The intent is that the function editor _could_ do a meaningful display of the contents by unzipping, whereas this is not true of binary actions in general since they might be native code.
+- `newSliceHandling` is set by a client deployer after building a package when there is at least one remote build.  It is read by a slice deployer in deciding whether to skip package deployment.  It is no longer really needed but was in place during a migration period when some client deployers and some slice deployers might or might not have had the (then) new logic for managing package deployment.  It is in the deployer annotation rather than directly in the `DeployStructure` to avoid confusing the YAML parser.  _This field should probably be removed._
 
+During deployment, the `DeployerAnnotation` structure is initialized by the [`getDeployerAnnotation`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/util.ts#L1263) function.  The `digest` field is updated later just before deployment.
 
-During deployment, the `DeployerAnnotation` structure is initialized by the [`getDeployerAnnotation`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/util.ts#L1263) function.
+The `getDeployerAnnotation` function attempts to determine if the project is in a git clone.  If so, it fills in more information, so that the information is meaningful when applied to a shared namespace whose project is managed by a team.  But note that the presence of uncommitted changes (indicated by `++` in the `commit` field) will correctly indicate that the exact state of the project at deployment time was unknown.
+
+#### Build avoidance
+
+The digests for actions represent the contents of the action just before deployment (that is, after building).  However, the goal of incremental deployment is to shorten the time taken to deploy, and building can be a significant part of that time.  Also, re-building an action may introduce semantically insignificant changes in the resulting zip file, which will change the digest and cause fresh deployment of the action, even though nothing _really_ has changed.  So, the deployer endeavors to avoid rebuilding actions when it does not seem necessary.
+
+Since builds run user-provided scripts, which are impossible for the deployer to reverse-engineer, the build avoidance logic is necessarily heuristic and we cannot guarantee that unnecessary builds are always avoided, and _not even_ that necessary builds will always occur.   The user always has the option of providing an explicit `build.[sh|cmd]` which will always be run but can use its own dependency tracking to minimize build time and avoid rebuilding deployable artifacts when that is not necessary.  Here I merely describe what the current heuristics do.
+
+For `package.json` builds, the heuristic is contained in the [`npmPackageAppearsBuilt`]() function.  It relies on comparing last modification times for the `node_modules` directory and the lock file to the last modification time for `package.json` itself.  Note that it does not do a complete dependency check, so changes to files other than `package.json` will not necessarily trigger a new build.  Note that the user always has the option to run non-incremental builds periodically and may be well advised to do so in cases where the heuristic is inadequate.
+
+For scripted builds, the heuristic employs a special indicator file called `.built`.  A script can write and/or delete this indicator file to achieve rough control over whether or not the build runs.
+
+A `package.json` build that contains an explicit `build` script is actually subject to both of the above checks.
 
