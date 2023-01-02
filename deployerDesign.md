@@ -365,7 +365,7 @@ The work of this function divides into sub-phases.
 
 First, the `skipPackageDeploy` variable is set, to suppress deploying packages when running as a slice deployer.  Logically, this flag is unnecessary since the `slice` member of the `DeployStructure` should be its equivalent.  However, when the current package deployment logic was rolled in, it was necessary to tolerate mismatched client and slice deployers (in either direction).  It is probably safe to simplify this logic now.
 
-Next, the `deployPackage` function is called to deploy all the resources in the package except for sequences, if any.  The sequences are noted and deferred.
+Next, the `deployPackage` function is called for each package in the project.  It will deploy all the resources in the package except for sequences, if any.  The sequences are noted and deferred.
 
 Next the `deploySequences` function is called on all of the packages of the project to deploy any sequences that were noted in the previous step.  
 
