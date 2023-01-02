@@ -353,7 +353,7 @@ This builder is for the case where there is only one file to deploy.  Either, `i
 
 The deploy phase divides into sub-phases handled by the functions `maybeLoadVersions` then `doDeploy` then `writeProjectStatus`.  
 
-The [`maybeLoadVersions`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/deploy.ts#L57) and [`writeProjectStatus`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/util.ts#L1559) functions are explained in [Version Management and Incremental Deploy](#Version_management_and_incremental_deploy).
+The [`maybeLoadVersions`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/deploy.ts#L57) and [`writeProjectStatus`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/util.ts#L1559) functions are explained in [Version Management and Incremental Deploy](#Version-management-and-incremental-deploy).
 
 #### The `doDeploy` Function
 
