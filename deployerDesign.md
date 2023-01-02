@@ -481,19 +481,19 @@ It is possible to detect when the local and remote information does not match, b
 
 The deployer uses digests to determine whether a package or action has changed.  There are two kinds of digests.
 
-_Action digests_ summarize the current contents of an action (code and metadata).  They are computed by the [`digestAction`]() function.
+_Action digests_ summarize the current contents of an action (code and metadata).  They are computed by the [`digestAction`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/util.ts#L1516) function.
 
-_Package digests_ summarize the current contents of a package (metadata and the set of contained actions but not the details of those actions).  They are computed by the [`digestPackage`]() function.
+_Package digests_ summarize the current contents of a package (metadata and the set of contained actions but not the details of those actions).  They are computed by the [`digestPackage`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/util.ts#L1465) function.
 
 In an incremental deploy, if a freshly calculated action digest matches the action digest from the last deploy (as recorded locally), then the action is not deployed.  If a fresh package digest matches the last locally recorded package digest, then the package is not deployed.  Note that package digests do not change when their contained actions change, only when the package metadata changes or the repertoire of contained actions changes (additions or deletions).  _As of this writing, I do not understand why a package would need to be redeployed when simply adding actions; the motivation is lost in history._
 
 #### Local Recording
 
-Information about the most recent deployments of a project are kept in `.deployed/versions.json` at the root of the project.  The contents are a JSON array, with one entry for each combination of API host and namespace to which the the project has been deployed.  Each entry (of type [`VersionEntry`]()) contains `packageVersions` and `actionVersions` members, with each such member being a map from the name of the package or action, respectively, to a [`VersionInfo`]() structure.
+Information about the most recent deployments of a project are kept in `.deployed/versions.json` at the root of the project.  The contents are a JSON array, with one entry for each combination of API host and namespace to which the the project has been deployed.  Each entry (of type [`VersionEntry`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/deploy-struct.ts#L186)) contains `packageVersions` and `actionVersions` members, with each such member being a map from the name of the package or action, respectively, to a [`VersionInfo`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/deploy-struct.ts#L159) structure.
 
 A `VersionInfo` contains two items: the `version` of the action or package as reported back from the most recent deployment operation, and the `digest` for that action and package.
 
-The version information is written at the end of deployment in function [`writeProjectStatus`]().  It is only re-read when a deployment is incremental.  In that case, it is loaded in the [`loadVersions`]() function and stored in the `versions` field of the `DeployStructure` for use during deployment.   The function [`maybeLoadVersions`]() decides whether to load versions.
+The version information is written at the end of deployment in function [`writeProjectStatus`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/util.ts#L1559).  It is only re-read when a deployment is incremental.  In that case, it is loaded in the [`loadVersions`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/util.ts#L1628) function and stored in the `versions` field of the `DeployStructure` for use during deployment.   The function [`maybeLoadVersions`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/deploy.ts#L57) decides whether to load versions.
 
 #### The `DeployerAnnotation` type
 
@@ -521,7 +521,7 @@ The digests for actions represent the contents of the action just before deploym
 
 Since builds run user-provided scripts, which are impossible for the deployer to reverse-engineer, the build avoidance logic is necessarily heuristic and we cannot guarantee that unnecessary builds are always avoided, and _not even_ that necessary builds will always occur.   The user always has the option of providing an explicit `build.[sh|cmd]` which will always be run but can use its own dependency tracking to minimize build time and avoid rebuilding deployable artifacts when that is not necessary.  Here I merely describe what the current heuristics do.
 
-For `package.json` builds, the heuristic is contained in the [`npmPackageAppearsBuilt`]() function.  It relies on comparing last modification times for the `node_modules` directory and the lock file to the last modification time for `package.json` itself.  Note that it does not do a complete dependency check, so changes to files other than `package.json` will not necessarily trigger a new build.  Note that the user always has the option to run non-incremental builds periodically and may be well advised to do so in cases where the heuristic is inadequate.
+For `package.json` builds, the heuristic is contained in the [`npmPackageAppearsBuilt`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/finder-builder.ts#L1358) and [`scriptAppearsBuilt`](https://github.com/digitalocean/functions-deployer/blob/0a25dc78dcdadb75fb409defb681bcfc440e6fba/src/finder-builder.ts#L1327) function.  It relies on comparing last modification times for the `node_modules` directory and the lock file to the last modification time for `package.json` itself.  Note that it does not do a complete dependency check, so changes to files other than `package.json` will not necessarily trigger a new build.  Note that the user always has the option to run non-incremental builds periodically and may be well advised to do so in cases where the heuristic is inadequate.
 
 For scripted builds, the heuristic employs a special indicator file called `.built`.  A script can write and/or delete this indicator file to achieve rough control over whether or not the build runs.
 
