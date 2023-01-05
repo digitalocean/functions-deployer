@@ -1267,7 +1267,7 @@ export async function getDeployerAnnotation(
 ): Promise<DeployerAnnotation> {
   const digest = undefined;
   try {
-    const git = simplegit();
+    const git = simplegit(project);
     const root = await git.revparse(['--show-toplevel']);
     const repo = await git.raw(['config', '--get', 'remote.origin.url']);
     const user = (await git.raw(['config', '--get', 'user.email'])).trim();
