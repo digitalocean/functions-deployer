@@ -1043,13 +1043,13 @@ function findSpecialFile(
       `'.include' and '.ignore' are not supported in the 'lib' directory`
     );
   }
-  if (buildDotCmd) {
-    if (!buildDotSh && process.platform !== 'win32') {
-      throw new Error(
-        `In ${filepath}: 'build.cmd' won't run on this platform and no 'build.sh' is provided`
-      );
-    }
+  if (buildDotCmd && process.platform === 'win32') {
     return 'build.cmd';
+  }
+  if (buildDotCmd && !buildDotSh) {
+    throw new Error(
+      `In ${filepath}: 'build.cmd' won't run on this platform and no 'build.sh' is provided`
+    );
   }
   if (buildDotSh) {
     // We don't do the "won't run on this platform" check here because we don't know if the build is remote
