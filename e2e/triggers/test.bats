@@ -19,7 +19,7 @@ teardown_file() {
 }
 
 @test "'triggers get' returns the expected data" {
-  INV1=$($DOCTL sls trig get invoke1)
+  INV1=$($DOCTL sls trig get invoke1 -ojson | jq -r '.[0]')
   NAME1=$(echo "$INV1" | jq -r .name)
   FCN1=$(echo "$INV1" | jq -r .function)
   TYPE1=$(echo "$INV1" | jq -r .type)
@@ -36,7 +36,7 @@ teardown_file() {
   BODYNAME=$(echo "$BODY1" | jq -r .name)
   assert_equal "$BODYNAME" "tester"
 
-  INV2=$($DOCTL sls trig get invoke2)
+  INV2=$($DOCTL sls trig get invoke2 -ojson | jq -r '.[0]')
   NAME2=$(echo "$INV2" | jq -r .name)
   FCN2=$(echo "$INV2" | jq -r .function)
   TYPE2=$(echo "$INV1" | jq -r .type)
@@ -46,7 +46,7 @@ teardown_file() {
   assert_equal "$NAME2" invoke2
   assert_equal "$FCN2" test-triggers/hello2
   assert_equal "$TYPE2" "SCHEDULED"
-  assert_equal "$ENAB2" null
+  assert_equal "$ENAB2" false
   assert_equal "$CRON2" "30 * * * *"
   assert_equal "$BODY2" null
 }

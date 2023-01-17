@@ -990,15 +990,20 @@ function readDirectory(
 }
 
 // Find the "dominant" special file in a collection of files within an action or lib directory, while checking for some errors
-// The dominance order is build.[sh|cmd] > .build > package.json > .include > none-of-these (returns 'identify' since 'building' will
+// The dominance order is build.[sh|cmd] > package.json > .include > none-of-these (returns 'identify' since 'building' will
 //   then start by identifying files)
 // Errors detected are:
-//    .build when there is also build.sh or build.cmd
-//    build.sh but no build.cmd on a windows system
-//    build.cmd but no build.sh on a macos or linux system
 //    .ignore when there is also .include
+//    .include and/or .ignore present in the lib directory
 //    no files in directory (or only an .ignore file); actions only
-//    in a 'lib' directory .include, .ignore, and .build are illegal
+//       -- note that this does not find all vacuous builds ... there could be more than one file, e.g., one of
+//          which is .ignore and ignores the other, or there could be a vacuous .include.  These more complex
+//          cases are found later in identifyActionFiles, where a more generic error will result
+//    build.cmd but no build.sh on a non-windows system.  This is wrong even if the build is later rescheduled to
+//       be remote, because the remote build will run in a runtime container which is definitely not windows
+// There is another possible error, which is build.sh but no build.cmd on a windows system.  We can't detect that
+//    here because we do not yet know whether the build will be remote or local and it is only an error if local.
+//    The error will be found in checkBuildingRequirements.
 function findSpecialFile(
   items: PathKind[],
   filepath: string,
@@ -1038,29 +1043,17 @@ function findSpecialFile(
       `'.include' and '.ignore' are not supported in the 'lib' directory`
     );
   }
-  if (process.platform === 'win32') {
-    if (buildDotSh && !buildDotCmd) {
-      // TODO this is erroneous here (issue #39).  It is not known here whether the build is
-      // local or remote.  So, the test for this error should be delayed into the build phase.
-      throw new Error(
-        `In ${filepath}: 'build.sh' won't run on this platform and no 'build.cmd' is provided`
-      );
-    }
-    if (buildDotCmd) {
-      return 'build.cmd';
-    }
-  } else {
-    // mac or linux
-    if (!buildDotSh && buildDotCmd) {
-      // TODO This is ok here because it is an error regardless of whether the build is local or remote.
-      // But probably if the dual test is delayed to a later phase, this should be as well.
-      throw new Error(
-        `In ${filepath}: 'build.cmd' won't run on this platform and no 'build.sh' is provided`
-      );
-    }
-    if (buildDotSh) {
-      return 'build.sh';
-    }
+  if (buildDotCmd && process.platform === 'win32') {
+    return 'build.cmd';
+  }
+  if (buildDotCmd && !buildDotSh) {
+    throw new Error(
+      `In ${filepath}: 'build.cmd' won't run on this platform and no 'build.sh' is provided`
+    );
+  }
+  if (buildDotSh) {
+    // We don't do the "won't run on this platform" check here because we don't know if the build is remote
+    return 'build.sh';
   }
   return npm ? 'package.json' : include ? '.include' : 'identify';
 }

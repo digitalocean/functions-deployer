@@ -276,6 +276,12 @@ export async function checkBuildingRequirements(
             action.remoteBuild,
             action.localBuild
           );
+          if (action.build === 'build.sh' && process.platform === 'win32') {
+            // If there was a build.cmd it would have been recorded in preference to build.sh
+            throw new Error(
+              `In function ${action.name}: 'build.sh' won't run on this platform and no 'build.cmd' is provided`
+            );
+          }
           needsLocal =
             needsLocal ||
             (!action.build?.startsWith('remote') && isRealBuild(action.build));
