@@ -611,7 +611,7 @@ async function validateActionSpec(
         break;
       }
       default:
-        return `Invalid key '${item}' found in 'action' clause in project.yml`;
+        return `Invalid key '${item}' found in 'functions' clause in project.yml`;
     }
   }
   return undefined;
