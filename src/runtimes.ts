@@ -49,6 +49,10 @@ const staticRuntimes: RuntimesConfig = {
     {
       default: true,
       kind: 'python:3.9'
+    },
+    {
+      default: false,
+      kind: 'python:3.11'
     }
   ]
 };
