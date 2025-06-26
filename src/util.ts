@@ -38,7 +38,7 @@ import * as os from 'os';
 import * as path from 'path';
 import simplegit from 'simple-git';
 import * as randomstring from 'randomstring';
-import * as crypto from 'crypto';
+import * as crypto from 'crypto'; // Ensure this import is present
 import * as yaml from 'js-yaml';
 import makeDebug from 'debug';
 import anymatch from 'anymatch';
@@ -152,28 +152,38 @@ export function encryptProjectConfig(config: string): {
   config: string;
   key: string;
 } {
-  const key = crypto.randomBytes(32);
-  const iv = Buffer.alloc(16).fill(0);
-  const cipher = crypto.createCipheriv('aes256', key, iv);
-  const encrypted = cipher.update(config, 'utf8', 'hex') + cipher.final('hex');
+  const key = crypto.randomBytes(32); // 256 bits for AES-256
+  const iv = crypto.randomBytes(12); // 12 bytes for AES-GCM nonce
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const encrypted = Buffer.concat([
+    cipher.update(config, 'utf8'),
+    cipher.final()
+  ]);
+  const authTag = cipher.getAuthTag();
+  const result = Buffer.concat([iv, encrypted, authTag]).toString('hex');
   return {
-    config: encrypted,
+    config: result,
     key: key.toString('hex')
   };
 }
 
 export function decryptProjectConfig(config: string, key: string): string {
-  const iv = Buffer.alloc(16).fill(0);
+  const data = Buffer.from(config, 'hex');
+  const iv = data.slice(0, 12); // First 12 bytes
+  const authTag = data.slice(-16); // Last 16 bytes
+  const encrypted = data.slice(12, -16); // Middle bytes
+
   const decipher = crypto.createDecipheriv(
-    'aes256',
+    'aes-256-gcm',
     Buffer.from(key, 'hex'),
     iv
   );
-  const decryptedMessage = Buffer.concat([
-    decipher.update(config, 'hex'),
+  decipher.setAuthTag(authTag);
+  const decrypted = Buffer.concat([
+    decipher.update(encrypted),
     decipher.final()
   ]);
-  return decryptedMessage.toString('utf8');
+  return decrypted.toString('utf8');
 }
 
 // Rename any 'functions' members of the contained PackageSpecs of a config to 'actions'.
