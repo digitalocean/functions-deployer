@@ -153,27 +153,52 @@ export function encryptProjectConfig(config: string): {
   key: string;
 } {
   const key = crypto.randomBytes(32);
-  const iv = Buffer.alloc(16).fill(0);
-  const cipher = crypto.createCipheriv('aes256', key, iv);
-  const encrypted = cipher.update(config, 'utf8', 'hex') + cipher.final('hex');
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+
+  const encrypted = Buffer.concat([
+    cipher.update(config, 'utf8'),
+    cipher.final()
+  ]);
+  const authTag = cipher.getAuthTag();
+
   return {
-    config: encrypted,
+    config: [
+      iv.toString('hex'),
+      authTag.toString('hex'),
+      encrypted.toString('hex')
+    ].join(':'), // colon-separated format
     key: key.toString('hex')
   };
 }
 
-export function decryptProjectConfig(config: string, key: string): string {
-  const iv = Buffer.alloc(16).fill(0);
+export function decryptProjectConfig(
+  configWithMeta: string,
+  key: string
+): string {
+  const [ivHex, authTagHex, encryptedHex] = configWithMeta.split(':');
+
+  if (!ivHex || !authTagHex || !encryptedHex) {
+    throw new Error('Invalid encrypted data format');
+  }
+
+  const iv = Buffer.from(ivHex, 'hex');
+  const authTag = Buffer.from(authTagHex, 'hex');
+  const encrypted = Buffer.from(encryptedHex, 'hex');
+
   const decipher = crypto.createDecipheriv(
-    'aes256',
+    'aes-256-gcm',
     Buffer.from(key, 'hex'),
     iv
   );
-  const decryptedMessage = Buffer.concat([
-    decipher.update(config, 'hex'),
+  decipher.setAuthTag(authTag);
+
+  const decrypted = Buffer.concat([
+    decipher.update(encrypted),
     decipher.final()
   ]);
-  return decryptedMessage.toString('utf8');
+
+  return decrypted.toString('utf8');
 }
 
 // Rename any 'functions' members of the contained PackageSpecs of a config to 'actions'.
