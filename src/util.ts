@@ -224,16 +224,18 @@ function locateBuild(
   remoteRequired: boolean,
   localRequired: boolean
 ) {
+  // Check for explicit remote build requests first (--remote-build flag or remoteBuild: true)
+  if (remoteRequired || (remoteRequested && !localRequired)) {
+    return 'remote';
+  }
   if (!isRealBuild(buildField)) {
     // Not a real build. Check remote-default conditions.
     if (defaultRemote && !localRequired) {
       return 'remote-default';
     } // else does not meet remote-default conditions
     return buildField;
-  } // else it's a real build. Check conditions for remote.
-  if (remoteRequired || (remoteRequested && !localRequired)) {
-    return 'remote';
-  } // else does not meet conditions for remote
+  }
+  // else does not meet conditions for remote
   return buildField;
 }
 
