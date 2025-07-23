@@ -30,7 +30,14 @@ delete_package() {
 init_namespace() {
   $DOCTL auth init --access-token  $DO_API_KEY
   $DOCTL sls install
-  $DOCTL sls connect $TEST_NAMESPACE
+
+  # Check if namespace exists, create if it doesn't
+  if ! $DOCTL sls connect $TEST_NAMESPACE 2>/dev/null; then
+    echo "Namespace $TEST_NAMESPACE not found, creating it..."
+    $DOCTL sls namespaces create --label $TEST_NAMESPACE --region nyc1
+    sleep 10  # Wait for namespace to be ready
+    $DOCTL sls connect $TEST_NAMESPACE
+  fi
 
   CREDS=$($DOCTL sls status --credentials)
   export API_HOST=$(echo "$CREDS" | jq -r .APIHost)
