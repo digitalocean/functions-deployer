@@ -15,10 +15,12 @@ elif [ -z "$TEST_NAMESPACE" ]; then
   echo "Missing TEST_NAMESPACE"
 fi
 
-set +x
-echo "DO_API_KEY: $DO_API_KEY"
-echo "TEST_NAMESPACE: $TEST_NAMESPACE"
-set -x
+echo -n "Namespace is: "
+for ((i=0; i<${#TEST_NAMESPACE}; i++)); do
+  echo -n "${TEST_NAMESPACE:$i:1}"
+done
+echo
+
 
 
 
