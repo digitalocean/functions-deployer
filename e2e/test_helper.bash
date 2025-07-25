@@ -15,8 +15,8 @@ elif [ -z "$TEST_NAMESPACE" ]; then
   echo "Missing TEST_NAMESPACE"
 fi
 
-echo "Namespace is $TEST_NAMESPACE"
-echo "API key is $DO_API_KEY"
+printf "Namespace is $TEST_NAMESPACE"
+printf "API key is $DO_API_KEY"
 
 echo "doctl auth list"
 
