@@ -19,7 +19,7 @@ echo "Namespace is $TEST_NAMESPACE"
 echo "API key is $DO_API_KEY"
 
 echo "doctl auth list"
-$DOCTL auth list
+
 
 if [ -z "$DOSLS" ]; then
   DOSLS=../bin/run
@@ -28,6 +28,8 @@ fi
 if [ -z "$DOCTL" ]; then
   DOCTL=../bin/doctl
 fi
+
+$DOCTL auth list
 
 delete_package() {
   $DOCTL sls undeploy $1 --packages
