@@ -15,6 +15,12 @@ elif [ -z "$TEST_NAMESPACE" ]; then
   echo "Missing TEST_NAMESPACE"
 fi
 
+echo "Namespace is $TEST_NAMESPACE"
+echo "API key is $DO_API_KEY"
+
+echo "doctl auth list"
+$DOCTL auth list
+
 if [ -z "$DOSLS" ]; then
   DOSLS=../bin/run
 fi
