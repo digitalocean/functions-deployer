@@ -33,9 +33,9 @@ init_namespace() {
   $DOCTL sls connect $TEST_NAMESPACE
 
   CREDS=$($DOCTL sls status --credentials)
-  export API_HOST=$(echo "$CREDS" | jq -r .APIHost)
-  export AUTH=$(echo "$CREDS" | jq -r .Auth)
-  export NIMBELLA_DIR=$(echo $CREDS | jq -r .Path)
+  export API_HOST=$(echo "$CREDS" | jq -r .apihost)
+  export AUTH=$(echo "$CREDS" | jq -r .auth)
+  export NIMBELLA_DIR=$(echo $CREDS | jq -r .path)
 }
 
 test_binary_action() {
