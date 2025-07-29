@@ -165,7 +165,7 @@ describe('validateTriggers', () => {
   });
 });
 
-describe('encryptProjectConfig', () => {
+describe('encryptProjectConfig with AES-GCM', () => {
   const yml = `
     packages:
       - name: test-triggers
@@ -175,23 +175,27 @@ describe('encryptProjectConfig', () => {
       `;
 
   const mockKey =
-    'cd7a175002a713696fef83b30e93638388eed520eec1cbddec8f51633db3dcb7';
-  const mockEncryptedData =
-    '6a0a96cbf2f656a4ec65a9d581a5628d9a5be8abe7910de6cbca8ab4b8e93a63e02a970460871d70f8bc1b773a8eb18b6b270f7e542d2159407ba89559e0477be27fe9c967c5388a7bb10185a5b1247addabe4ce97fb7aa68c034ad2bbfce4c7fcb89bdd7973d46aa215d3489b2ff4fa27523e7ff76ea1845b28010ecccd37c7';
+    'cd7a175002a713696fef83b30e93638388eed520eec1cbddec8f51633db3dcb7'; // 32 bytes
+  const mockConfig = `6a0a96cbf2f656a4ec65a9d581a5628d9a5be8abe7910de6cbca8ab4b8e93a63e02a970460871d70f8bc1b773a8eb18b6b270f7e542d2159407ba89559e0477be27fe9c967c5388a7bb10185a5b1247addabe4ce97fb7aa68c034ad2bbfce4c7fcb89bdd7973d46aa215d3489b2ff4fa27523e7ff76ea1845b28010ecccd37c7`;
 
-  it('should encrypt the project yaml data', () => {
-    const mockRandomBytes = jest
-      .spyOn(crypto, 'randomBytes')
-      .mockImplementationOnce(() => Buffer.from(mockKey, 'hex'));
-
-    const res = encryptProjectConfig(yml);
-    expect(mockRandomBytes).toHaveBeenCalledTimes(1);
-    expect(res.key).toEqual(mockKey);
-    expect(res.config).toEqual(mockEncryptedData);
+  beforeEach(() => {
+    jest.restoreAllMocks();
   });
 
-  it('should decrypt project yaml data given the correct key', () => {
-    const res = decryptProjectConfig(mockEncryptedData, mockKey);
-    expect(res).toEqual(yml);
+  it('should decrypt AES-GCM v2 config and return original YAML', () => {
+    const { config, key } = encryptProjectConfig(yml);
+
+    expect(config.startsWith('v2:')).toBe(true);
+    const parts = config.split(':');
+    expect(parts.length).toBe(4);
+
+    // Decrypt
+    const decrypted = decryptProjectConfig(config, key);
+    expect(decrypted).toEqual(yml);
+  });
+
+  it('should decrypt mock encrypted config and return original YAML', () => {
+    const decryptedWithOldConfig = decryptProjectConfig(mockConfig, mockKey);
+    expect(decryptedWithOldConfig).toEqual(yml);
   });
 });

@@ -153,27 +153,45 @@ export function encryptProjectConfig(config: string): {
   key: string;
 } {
   const key = crypto.randomBytes(32);
-  const iv = Buffer.alloc(16).fill(0);
-  const cipher = crypto.createCipheriv('aes256', key, iv);
-  const encrypted = cipher.update(config, 'utf8', 'hex') + cipher.final('hex');
-  return {
-    config: encrypted,
-    key: key.toString('hex')
-  };
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const encrypted = Buffer.concat([
+    cipher.update(config, 'utf8'),
+    cipher.final()
+  ]);
+  const authTag = cipher.getAuthTag();
+  const final = `v2:${iv.toString('hex')}:${authTag.toString(
+    'hex'
+  )}:${encrypted.toString('hex')}`;
+  return { config: final, key: key.toString('hex') };
 }
 
-export function decryptProjectConfig(config: string, key: string): string {
-  const iv = Buffer.alloc(16).fill(0);
-  const decipher = crypto.createDecipheriv(
-    'aes256',
-    Buffer.from(key, 'hex'),
-    iv
-  );
-  const decryptedMessage = Buffer.concat([
-    decipher.update(config, 'hex'),
+export function decryptProjectConfig(
+  encrypted: string,
+  keyHex: string
+): string {
+  const key = Buffer.from(keyHex, 'hex');
+  if (encrypted.startsWith('v2:')) {
+    const [_v, ivHex, tagHex, encryptedHex] = encrypted.split(':');
+    const decipher = crypto.createDecipheriv(
+      'aes-256-gcm',
+      key,
+      Buffer.from(ivHex, 'hex')
+    );
+    decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
+    const decrypted = Buffer.concat([
+      decipher.update(Buffer.from(encryptedHex, 'hex')),
+      decipher.final()
+    ]);
+    return decrypted.toString('utf8');
+  }
+  const iv = Buffer.alloc(16, 0);
+  const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+  const decrypted = Buffer.concat([
+    decipher.update(Buffer.from(encrypted, 'hex')),
     decipher.final()
   ]);
-  return decryptedMessage.toString('utf8');
+  return decrypted.toString('utf8');
 }
 
 // Rename any 'functions' members of the contained PackageSpecs of a config to 'actions'.
