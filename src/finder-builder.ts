@@ -1396,8 +1396,8 @@ function npmBuilder(
   const cmd = flags.yarn ? 'yarn' : 'npm';
   const npmRunBuild = buildScriptExists(filepath);
   const args = npmRunBuild
-    ? ['install', '&&', cmd, 'run', 'build']
-    : ['install', '--production'];
+    ? ['install', '--ignore-scripts', '&&', cmd, 'run', 'build']
+    : ['install', '--ignore-scripts', '--production'];
   const infoMsg = [cmd, ...args].join(' ');
   if (flags.incremental) {
     debug('Detected incremental build');
@@ -1424,7 +1424,7 @@ function npmBuilder(
     filepath,
     displayPath,
     infoMsg,
-    `${cmd} install`,
+    `${cmd} install --ignore-scripts`,
     flags.verboseBuild,
     buildEnv,
     slice,

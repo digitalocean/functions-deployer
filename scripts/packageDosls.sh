@@ -18,7 +18,7 @@ echo "- Removing old artifacts"
 rm -rf lib node_modules *.tgz dosls
 
 echo "- Ensuring a full install"
-npm install --silent --no-progress
+npm install --ignore-scripts --silent --no-progress
 
 echo "- Building the simple tarball"
 npm pack
@@ -27,7 +27,7 @@ echo "- Creating node_modules for the full install"
 mkdir dosls
 cd dosls
 cp ../package.json .
-npm install --production --silent --no-progress ../$TARBALL_NAME
+npm install --ignore-scripts --production --silent --no-progress ../$TARBALL_NAME
 rm *.json
 
 echo "- Downloading node binary suitable for runtime use"

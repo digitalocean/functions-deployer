@@ -16,10 +16,10 @@ The `internalRelease.sh` script can also be run with a `--test` flag, in which c
 
 ### Testing changes locally
 
-To test changes locally
+To test changes locally. make sure to add --ignore-scripts flag during install.
 
 ```
-npm install
+npm install --ignore-scripts
 npm run build
 ```
 after which the deployer shell can be run as `/path/to/repo/bin/run`.  It is often convenient to make a symbolic link in your path pointing to that location (e.g. as `dosls`).   Then, you can test with

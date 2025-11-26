@@ -13,7 +13,7 @@ echo "- Removing old artifacts"
 rm -rf sandbox *.tar.gz digitalocean-functions-deployer-*.tgz node_modules
 
 echo "- Building the simple deployer tarball"
-npm install
+npm install --ignore-scripts
 npm pack
 
 echo "- Moving artifacts to the sandbox folder"
@@ -31,7 +31,7 @@ fi
 
 echo "$VERSION" > version
 echo "- Installing production dependencies"
-npm install --production
+npm install --ignore-scripts --production
 
 cd ..
 echo "- Creating tar file $TARBALL_NAME"
