@@ -13,12 +13,12 @@ let cachedRuntimes: RuntimesConfig;
 const staticRuntimes: RuntimesConfig = {
   go: [
     {
-      default: false,
-      kind: 'go:1.15'
-    },
-    {
       default: true,
       kind: 'go:1.17'
+    },
+    {
+      default: false,
+      kind: 'go:1.20'
     }
   ],
   nodejs: [
