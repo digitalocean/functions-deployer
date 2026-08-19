@@ -727,7 +727,9 @@ async function appendAndCheck(
 
 // Slice the project to contain only one ActionSpec; return a DeployStructure that can be written
 // out as a project.yml and also the path to the action file or directory, for zipping.
-function makeConfigFromActionSpec(
+// Everything the remote deployer needs has to be copied here: the sliced spec is the only
+// view of the project that the remote build gets.
+export function makeConfigFromActionSpec(
   action: ActionSpec,
   spec: DeployStructure,
   pkgName: string
@@ -754,7 +756,8 @@ function makeConfigFromActionSpec(
     webSecure,
     annotations,
     environment,
-    limits
+    limits,
+    triggers
   } = action;
   const newSpec = {
     targetNamespace,
@@ -777,7 +780,8 @@ function makeConfigFromActionSpec(
     annotations,
     parameters: action.parameters,
     environment,
-    limits
+    limits,
+    triggers
   } as ActionSpec;
   removeUndefined(newSpec);
   removeUndefined(newAction);
