@@ -361,3 +361,15 @@ function getUniqueCredentials(
     do_token: process.env.DO_API_KEY
   };
 }
+
+// Drop account PAT from remote-build credentials; keep OW namespace creds.
+// Does not mutate the input. APICLI-5594 / VULN-5812
+export function omitAccountTokenFromRemoteSlice(
+  credentials: Credentials | undefined
+): Credentials | undefined {
+  if (!credentials) {
+    return credentials;
+  }
+  const { do_token: _accountToken, ...safe } = credentials;
+  return safe;
+}

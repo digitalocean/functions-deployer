@@ -21,6 +21,7 @@ import {
   PathKind,
   Feedback
 } from './deploy-struct';
+import { omitAccountTokenFromRemoteSlice } from './credentials';
 import {
   actionFileToParts,
   filterFiles,
@@ -756,11 +757,12 @@ function makeConfigFromActionSpec(
     environment,
     limits
   } = action;
+  // Omit account PAT from the remote-build slice.
   const newSpec = {
     targetNamespace,
     parameters,
     environment: globalEnv,
-    credentials,
+    credentials: omitAccountTokenFromRemoteSlice(credentials),
     flags,
     deployerAnnotation,
     buildEnv,
