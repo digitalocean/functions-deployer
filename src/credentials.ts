@@ -370,6 +370,7 @@ export function omitAccountTokenFromRemoteSlice(
   if (!credentials) {
     return credentials;
   }
-  const { do_token: _accountToken, ...safe } = credentials;
+  const safe = { ...credentials };
+  delete safe.do_token;
   return safe;
 }
