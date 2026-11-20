@@ -728,7 +728,8 @@ async function appendAndCheck(
 
 // Slice the project to contain only one ActionSpec; return a DeployStructure that can be written
 // out as a project.yml and also the path to the action file or directory, for zipping.
-function makeConfigFromActionSpec(
+// Exported for unit tests that assert remote-slice credentials filtering.
+export function makeConfigFromActionSpec(
   action: ActionSpec,
   spec: DeployStructure,
   pkgName: string

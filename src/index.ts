@@ -57,8 +57,7 @@ export {
   Persister,
   authPersister,
   getCredentialsFromEnvironment,
-  nimbellaDir,
-  omitAccountTokenFromRemoteSlice
+  nimbellaDir
 } from './credentials';
 export {
   wskRequest,

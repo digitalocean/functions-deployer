@@ -16,7 +16,7 @@ describe('omitAccountTokenFromRemoteSlice', () => {
     expect(omitAccountTokenFromRemoteSlice(undefined)).toBeUndefined();
   });
 
-  it('omits do_token and keeps namespace OpenWhisk credentials', () => {
+  it('allow-lists namespace and OW credentials only', () => {
     const safe = omitAccountTokenFromRemoteSlice(full);
     expect(safe).toEqual({
       namespace: 'ns1',
@@ -25,6 +25,16 @@ describe('omitAccountTokenFromRemoteSlice', () => {
         api_key: 'namespace-ow-key'
       }
     });
+    expect(safe && 'do_token' in safe).toBe(false);
+  });
+
+  it('does not forward unknown credential fields', () => {
+    const withExtra = {
+      ...full,
+      extra_secret: 'must_not_leak'
+    } as Credentials & { extra_secret: string };
+    const safe = omitAccountTokenFromRemoteSlice(withExtra);
+    expect(safe && 'extra_secret' in (safe as object)).toBe(false);
     expect(safe && 'do_token' in safe).toBe(false);
   });
 
