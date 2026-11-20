@@ -260,7 +260,8 @@ export interface CredentialEntry {
 export interface Credentials {
   namespace: string | undefined;
   ow: OWOptions;
-  do_token: string;
+  // Account PAT for triggers; omit from remote-build slices.
+  do_token?: string;
 }
 
 // Compact and less complete information about a Credential suitable for listing and tabular display

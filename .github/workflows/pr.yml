@@ -13,7 +13,10 @@ jobs:
     uses: ./.github/workflows/_lint.yml
   unit-tests:
     uses: ./.github/workflows/_unit-test.yml
+  # Fork PRs do not receive org secrets, so e2e cannot authenticate.
+  # Same-repo PRs and pushes to main still run the full suite.
   e2e-tests:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     uses: ./.github/workflows/_e2e-tests.yml
     secrets:
       DO_API_KEY: ${{ secrets.DO_API_KEY }}

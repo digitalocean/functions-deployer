@@ -361,3 +361,17 @@ function getUniqueCredentials(
     do_token: process.env.DO_API_KEY
   };
 }
+
+// Allow-list OW namespace creds for remote-build slices; never include do_token
+// or any other credential fields. Does not mutate the input. APICLI-5594 / VULN-5812
+export function omitAccountTokenFromRemoteSlice(
+  credentials: Credentials | undefined
+): Credentials | undefined {
+  if (!credentials) {
+    return credentials;
+  }
+  return {
+    namespace: credentials.namespace,
+    ow: credentials.ow
+  };
+}
