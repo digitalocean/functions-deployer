@@ -361,3 +361,15 @@ function getUniqueCredentials(
     do_token: process.env.DO_API_KEY
   };
 }
+
+export function omitAccountTokenFromRemoteSlice(
+  credentials: Credentials | undefined
+): Credentials | undefined {
+  if (!credentials) {
+    return credentials;
+  }
+  return {
+    namespace: credentials.namespace,
+    ow: credentials.ow
+  };
+}
