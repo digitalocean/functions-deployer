@@ -7,12 +7,11 @@ if [ -f ../.env.test ]; then
   export $(echo $(cat ../.env.test | sed 's/#.*//g' | xargs) | envsubst)
 fi
 
-if [ -z "$DO_API_KEY" ]; then
-  kill $PPID
-  echo "Missing DO_API_KEY"
-elif [ -z "$TEST_NAMESPACE" ]; then
-  kill $PPID
-  echo "Missing TEST_NAMESPACE"
+# Fork PRs don't get org secrets. Skip instead of killing the suite so the
+# e2e job still runs; with secrets present the full suite executes.
+MISSING_DO_CREDS=0
+if [ -z "$DO_API_KEY" ] || [ -z "$TEST_NAMESPACE" ]; then
+  MISSING_DO_CREDS=1
 fi
 
 if [ -z "$DOSLS" ]; then
@@ -37,6 +36,16 @@ init_namespace() {
   export AUTH=$(echo "$CREDS" | jq -r .auth)
   export NIMBELLA_DIR=$(echo $CREDS | jq -r .path)
 }
+
+# setup_file still runs teardown_file after skips; no-op CLIs when creds missing.
+if [ "$MISSING_DO_CREDS" -eq 1 ]; then
+  DOSLS=true
+  DOCTL=true
+  init_namespace() { :; }
+  setup() {
+    skip "DO_API_KEY/TEST_NAMESPACE not available"
+  }
+fi
 
 test_binary_action() {
 	run $DOCTL sls fn invoke $1 -f
