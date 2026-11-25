@@ -7,8 +7,6 @@ if [ -f ../.env.test ]; then
   export $(echo $(cat ../.env.test | sed 's/#.*//g' | xargs) | envsubst)
 fi
 
-# Fork PRs don't get org secrets. Skip instead of killing the suite so the
-# e2e job still runs; with secrets present the full suite executes.
 MISSING_DO_CREDS=0
 if [ -z "$DO_API_KEY" ] || [ -z "$TEST_NAMESPACE" ]; then
   MISSING_DO_CREDS=1
@@ -37,8 +35,6 @@ init_namespace() {
   export NIMBELLA_DIR=$(echo $CREDS | jq -r .path)
 }
 
-# setup_file still runs teardown_file after skips; no-op CLIs/curl when creds missing
-# (package-binding teardown calls curl with $AUTH/$API_HOST).
 if [ "$MISSING_DO_CREDS" -eq 1 ]; then
   DOSLS=true
   DOCTL=true
