@@ -37,10 +37,12 @@ init_namespace() {
   export NIMBELLA_DIR=$(echo $CREDS | jq -r .path)
 }
 
-# setup_file still runs teardown_file after skips; no-op CLIs when creds missing.
+# setup_file still runs teardown_file after skips; no-op CLIs/curl when creds missing
+# (package-binding teardown calls curl with $AUTH/$API_HOST).
 if [ "$MISSING_DO_CREDS" -eq 1 ]; then
   DOSLS=true
   DOCTL=true
+  curl() { return 0; }
   init_namespace() { :; }
   setup() {
     skip "DO_API_KEY/TEST_NAMESPACE not available"
