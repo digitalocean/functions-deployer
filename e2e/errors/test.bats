@@ -6,7 +6,7 @@ setup_file() {
 }
 
 teardown_file() {
-	$DOCTL sls fn delete test-errors
+	delete_package "test-errors"
 }
 
 @test "deploying project using clashing resource identifiers" {
